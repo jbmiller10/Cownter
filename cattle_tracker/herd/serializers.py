@@ -1,10 +1,11 @@
 """Serializers for the herd app."""
 
+from datetime import date
 from typing import Any, ClassVar
 
 from rest_framework import serializers
 
-from .models import Cattle, Photo, PhotoCattle
+from .models import Cattle, Photo, PhotoCattle, WeightLog
 
 
 class CattleSerializer(serializers.ModelSerializer):
@@ -259,5 +260,45 @@ class PhotoTagSerializer(serializers.Serializer):
             msg = f"Invalid cattle IDs: {invalid_ids_str}"
             raise serializers.ValidationError(msg)
 
+        return value
+
+
+class WeightLogSerializer(serializers.ModelSerializer):
+    """
+    Serializer for WeightLog model.
+
+    Handles serialization/deserialization of weight measurements with validation for:
+    - weight_kg must be greater than 0
+    - measured_at date cannot be in the future
+    """
+
+    class Meta:
+        """Meta options for WeightLogSerializer."""
+
+        model = WeightLog
+        fields: ClassVar[list[str]] = [
+            "id",
+            "cattle",
+            "measured_at",
+            "weight_kg",
+            "method",
+        ]
+        read_only_fields: ClassVar[list[str]] = ["id", "cattle"]
+
+    def validate_weight_kg(self, value: float) -> float:
+        """Validate weight is positive."""
+        if value <= 0:
+            msg = "Weight must be greater than 0 kg."
+            raise serializers.ValidationError(msg)
+        return value
+
+    def validate_measured_at(self, value: date) -> date:
+        """Validate measurement date is not in the future."""
+        from datetime import UTC, datetime
+
+        today = datetime.now(tz=UTC).date()
+        if value > today:
+            msg = "Measurement date cannot be in the future."
+            raise serializers.ValidationError(msg)
         return value
 

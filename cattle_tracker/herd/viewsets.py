@@ -17,12 +17,13 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Cattle, Photo, PhotoCattle
+from .models import Cattle, Photo, PhotoCattle, WeightLog
 from .serializers import (
     CattleSerializer,
     PhotoSerializer,
     PhotoTagSerializer,
     PhotoUploadSerializer,
+    WeightLogSerializer,
 )
 from .utils.image_processing import (
     extract_exif_data,
@@ -435,4 +436,123 @@ class PhotoUploadView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List weight logs for a cattle",
+        description="Retrieve all weight measurements for a specific cattle, sorted by date.",
+        responses={
+            200: WeightLogSerializer(many=True),
+            404: {"description": "Cattle not found"},
+        },
+    ),
+    create=extend_schema(
+        summary="Add weight measurement",
+        description="Record a new weight measurement for a cattle.",
+        request=WeightLogSerializer,
+        responses={
+            201: WeightLogSerializer,
+            400: {"description": "Invalid data or duplicate date"},
+            404: {"description": "Cattle not found"},
+        },
+        examples=[
+            OpenApiExample(
+                "Add weight log",
+                value={
+                    "measured_at": "2024-01-15",
+                    "weight_kg": 450.5,
+                    "method": "scale",
+                },
+                request_only=True,
+            ),
+        ],
+    ),
+    destroy=extend_schema(
+        summary="Delete weight measurement",
+        description="Remove a weight measurement record.",
+        responses={
+            204: None,
+            404: {"description": "Weight log not found"},
+        },
+    ),
+)
+class WeightLogViewSet(viewsets.GenericViewSet):
+    """
+    ViewSet for WeightLog model providing nested CRUD operations under cattle.
+
+    Provides endpoints for:
+    - Listing weight logs for a specific cattle (sorted by measured_at)
+    - Creating new weight measurements
+    - Deleting weight measurements
+
+    Validates:
+    - weight_kg must be greater than 0
+    - measured_at cannot be in the future
+    - Duplicate dates are prevented by database constraint
+    """
+
+    serializer_class = WeightLogSerializer
+    lookup_field = "pk"
+
+    def get_queryset(self) -> Any:
+        """Filter weight logs by cattle ID from URL."""
+        cattle_id = self.kwargs.get("cattle_pk")
+        return WeightLog.objects.filter(cattle_id=cattle_id).order_by("measured_at")
+
+    def list(self, request: Any, cattle_pk: int | None = None) -> Response:  # noqa: ARG002
+        """List all weight logs for a cattle."""
+        # Verify cattle exists
+        if not Cattle.objects.filter(pk=cattle_pk).exists():
+            return Response(
+                {"detail": "Cattle not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    def create(self, request: Any, cattle_pk: int | None = None) -> Response:
+        """Create a new weight log for a cattle."""
+        # Verify cattle exists
+        try:
+            cattle = Cattle.objects.get(pk=cattle_pk)
+        except Cattle.DoesNotExist:
+            return Response(
+                {"detail": "Cattle not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            try:
+                serializer.save(cattle=cattle)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            except Exception as e:
+                # Handle unique constraint violation
+                if "unique constraint" in str(e).lower() or "duplicate" in str(e).lower():
+                    return Response(
+                        {"detail": "A weight log already exists for this date."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                raise
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def destroy(
+        self,
+        request: Any,  # noqa: ARG002
+        pk: int | None = None,
+        cattle_pk: int | None = None,
+    ) -> Response:
+        """Delete a weight log."""
+        try:
+            weight_log = WeightLog.objects.get(pk=pk, cattle_id=cattle_pk)
+            weight_log.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except WeightLog.DoesNotExist:
+            return Response(
+                {"detail": "Weight log not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
