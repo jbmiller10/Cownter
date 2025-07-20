@@ -1,98 +1,114 @@
-import React from 'react'
-import {
-  AppBar,
-  Toolbar,
-  Typography,
-  Container,
-  Box,
-  Card,
-  CardContent,
-  Grid,
-  IconButton,
-} from '@mui/material'
-import {
-  Pets as PetsIcon,
-  LightMode as LightModeIcon,
-  DarkMode as DarkModeIcon,
-} from '@mui/icons-material'
-import { useTheme } from './theme/useTheme'
+import React, { Suspense } from 'react'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { CircularProgress, Box } from '@mui/material'
+import { Layout } from './components/Layout'
+import { ProtectedRoute } from './components/ProtectedRoute'
+import { ErrorBoundary } from './components/ErrorBoundary'
+
+// Lazy load page components for code splitting
+const LoginPage = React.lazy(() =>
+  import('./pages/LoginPage').then((m) => ({ default: m.LoginPage }))
+)
+const DashboardPage = React.lazy(() =>
+  import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage }))
+)
+const CattleListPage = React.lazy(() =>
+  import('./pages/CattleListPage').then((m) => ({ default: m.CattleListPage }))
+)
+const PhotosPage = React.lazy(() =>
+  import('./pages/PhotosPage').then((m) => ({ default: m.PhotosPage }))
+)
+const StatsPage = React.lazy(() =>
+  import('./pages/StatsPage').then((m) => ({ default: m.StatsPage }))
+)
+const WeightLogsPage = React.lazy(() =>
+  import('./pages/WeightLogsPage').then((m) => ({ default: m.WeightLogsPage }))
+)
+const NotFoundPage = React.lazy(() =>
+  import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage }))
+)
+
+// Loading component for lazy-loaded routes
+const PageLoader: React.FC = () => (
+  <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+    <CircularProgress />
+  </Box>
+)
 
 function App() {
-  const { mode, toggleColorMode } = useTheme()
-
   return (
-    <Box sx={{ flexGrow: 1 }}>
-      <AppBar position="static">
-        <Toolbar>
-          <PetsIcon sx={{ mr: 2 }} />
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            Kurten Cowner
-          </Typography>
-          <IconButton sx={{ ml: 1 }} onClick={toggleColorMode} color="inherit">
-            {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
-          </IconButton>
-        </Toolbar>
-      </AppBar>
+    <ErrorBoundary>
+      <Routes>
+        <Route
+          path="/login"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <LoginPage />
+            </Suspense>
+          }
+        />
 
-      <Container maxWidth="lg" sx={{ mt: 4 }}>
-        <Grid container spacing={3}>
-          <Grid item xs={12}>
-            <Card>
-              <CardContent>
-                <Typography variant="h4" component="h1" gutterBottom>
-                  Welcome to Kurten Cowner
-                </Typography>
-                <Typography variant="body1" color="text.secondary">
-                  Your cattle herd management system is ready! This application helps you track
-                  cattle records, manage lineage, upload photos, and generate comprehensive herd
-                  statistics.
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
+          <Route
+            index
+            element={
+              <Suspense fallback={<PageLoader />}>
+                <DashboardPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="cattle"
+            element={
+              <Suspense fallback={<PageLoader />}>
+                <CattleListPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="photos"
+            element={
+              <Suspense fallback={<PageLoader />}>
+                <PhotosPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="stats"
+            element={
+              <Suspense fallback={<PageLoader />}>
+                <StatsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="weight-logs"
+            element={
+              <Suspense fallback={<PageLoader />}>
+                <WeightLogsPage />
+              </Suspense>
+            }
+          />
+        </Route>
 
-          <Grid item xs={12} md={4}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Cattle Records
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Manage individual cattle with detailed metadata including color, date of birth,
-                  sex, and horn status.
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          <Grid item xs={12} md={4}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Lineage Tracking
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Track parent-child relationships and breeding history across your herd.
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          <Grid item xs={12} md={4}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Photo Management
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Upload and tag photos with automatic EXIF data extraction.
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-      </Container>
-    </Box>
+        <Route
+          path="/404"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <NotFoundPage />
+            </Suspense>
+          }
+        />
+        <Route path="*" element={<Navigate to="/404" replace />} />
+      </Routes>
+    </ErrorBoundary>
   )
 }
 

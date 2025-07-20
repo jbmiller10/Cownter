@@ -1,4 +1,4 @@
-import { Cattle, Photo, WeightLog, HerdStatistics, User } from '../../types/api';
+import { Cattle, Photo, WeightLog, HerdStatistics, User } from '../../types/api'
 
 export const mockUser: User = {
   id: 1,
@@ -6,7 +6,7 @@ export const mockUser: User = {
   email: 'test@example.com',
   first_name: 'Test',
   last_name: 'User',
-};
+}
 
 export const mockCattle: Cattle[] = [
   {
@@ -53,7 +53,7 @@ export const mockCattle: Cattle[] = [
     latest_weight: 350,
     age_in_months: 10,
   },
-];
+]
 
 export const mockPhotos: Photo[] = [
   {
@@ -79,7 +79,7 @@ export const mockPhotos: Photo[] = [
     created_at: '2024-01-10T10:00:00Z',
     updated_at: '2024-01-10T10:00:00Z',
   },
-];
+]
 
 export const mockWeightLogs: WeightLog[] = [
   {
@@ -107,7 +107,7 @@ export const mockWeightLogs: WeightLog[] = [
     created_at: '2024-01-15T10:00:00Z',
     updated_at: '2024-01-15T10:00:00Z',
   },
-];
+]
 
 export const mockHerdStats: HerdStatistics = {
   total_cattle: 25,
@@ -138,4 +138,4 @@ export const mockHerdStats: HerdStatistics = {
     { month: '2023-09', count: 1 },
     { month: '2023-08', count: 0 },
   ],
-};
+}
