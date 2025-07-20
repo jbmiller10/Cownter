@@ -6,6 +6,7 @@ from typing import Any, ClassVar
 from rest_framework import serializers
 
 from .models import Cattle, Photo, PhotoCattle, WeightLog
+from django.db.models import Q
 
 
 class CattleSerializer(serializers.ModelSerializer):
@@ -261,6 +262,242 @@ class PhotoTagSerializer(serializers.Serializer):
             raise serializers.ValidationError(msg)
 
         return value
+
+
+class CattleDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Cattle model with frontend-compatible field names.
+    
+    Maps backend field names to frontend expectations:
+    - tag_number -> ear_tag
+    - dob -> date_of_birth
+    - sire -> father
+    - dam -> mother
+    """
+    
+    ear_tag = serializers.CharField(source='tag_number')
+    date_of_birth = serializers.DateField(source='dob')
+    father = serializers.PrimaryKeyRelatedField(
+        source='sire',
+        queryset=Cattle.objects.all(),
+        allow_null=True,
+        required=False
+    )
+    mother = serializers.PrimaryKeyRelatedField(
+        source='dam',
+        queryset=Cattle.objects.all(),
+        allow_null=True,
+        required=False
+    )
+    father_details = serializers.SerializerMethodField()
+    mother_details = serializers.SerializerMethodField()
+    latest_weight = serializers.SerializerMethodField()
+    age_in_months = serializers.SerializerMethodField()
+    
+    # Map sex values from backend to frontend format
+    sex = serializers.SerializerMethodField()
+    horn_status = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Cattle
+        fields = [
+            'id', 'ear_tag', 'name', 'sex', 'date_of_birth',
+            'color', 'breed', 'horn_status', 'status',
+            'father', 'father_details', 'mother', 'mother_details',
+            'created_at', 'updated_at',
+            'latest_weight', 'age_in_months'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+    
+    def get_sex(self, obj):
+        """Convert backend sex values to frontend format."""
+        sex_mapping = {
+            'cow': 'F',
+            'heifer': 'F',
+            'bull': 'M',
+            'steer': 'M',
+            'calf': 'M'  # Default to M for calf, could be enhanced
+        }
+        return sex_mapping.get(obj.sex, 'M')
+    
+    def get_horn_status(self, obj):
+        """Convert horn status to uppercase."""
+        return obj.horn_status.upper()
+    
+    def get_father_details(self, obj):
+        """Get father details if available."""
+        if obj.sire:
+            return CattleBasicSerializer(obj.sire).data
+        return None
+    
+    def get_mother_details(self, obj):
+        """Get mother details if available."""
+        if obj.dam:
+            return CattleBasicSerializer(obj.dam).data
+        return None
+    
+    def get_latest_weight(self, obj):
+        """Get the most recent weight measurement."""
+        latest_log = obj.weight_logs.order_by('-measured_at').first()
+        return float(latest_log.weight_kg) if latest_log else None
+    
+    def get_age_in_months(self, obj):
+        """Calculate age in months."""
+        if obj.dob:
+            from datetime import date
+            today = date.today()
+            months = (today.year - obj.dob.year) * 12 + today.month - obj.dob.month
+            if today.day < obj.dob.day:
+                months -= 1
+            return max(0, months)
+        return 0
+
+
+class CattleBasicSerializer(serializers.ModelSerializer):
+    """
+    Basic serializer for Cattle with minimal fields and frontend field names.
+    Used for nested representations.
+    """
+    
+    ear_tag = serializers.CharField(source='tag_number')
+    date_of_birth = serializers.DateField(source='dob')
+    sex = serializers.SerializerMethodField()
+    horn_status = serializers.SerializerMethodField()
+    age_in_months = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Cattle
+        fields = [
+            'id', 'ear_tag', 'name', 'sex', 'date_of_birth',
+            'color', 'breed', 'horn_status', 'age_in_months',
+            'created_at', 'updated_at'
+        ]
+    
+    def get_sex(self, obj):
+        """Convert backend sex values to frontend format."""
+        sex_mapping = {
+            'cow': 'F',
+            'heifer': 'F',
+            'bull': 'M',
+            'steer': 'M',
+            'calf': 'M'
+        }
+        return sex_mapping.get(obj.sex, 'M')
+    
+    def get_horn_status(self, obj):
+        """Convert horn status to uppercase."""
+        return obj.horn_status.upper()
+    
+    def get_age_in_months(self, obj):
+        """Calculate age in months."""
+        if obj.dob:
+            from datetime import date
+            today = date.today()
+            months = (today.year - obj.dob.year) * 12 + today.month - obj.dob.month
+            if today.day < obj.dob.day:
+                months -= 1
+            return max(0, months)
+        return 0
+
+
+class CattleLineageSerializer(serializers.ModelSerializer):
+    """
+    Serializer for cattle lineage information.
+    
+    Provides comprehensive family tree data including:
+    - Current cattle details
+    - Parents (sire and dam)
+    - Grandparents (if available)
+    - Siblings (sharing same sire or dam)
+    - Offspring (where this cattle is sire or dam)
+    """
+    
+    # Use frontend field names
+    current = serializers.SerializerMethodField()
+    parents = serializers.SerializerMethodField()
+    grandparents = serializers.SerializerMethodField()
+    siblings = serializers.SerializerMethodField()
+    offspring = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Cattle
+        fields = ['current', 'parents', 'grandparents', 'siblings', 'offspring']
+    
+    def get_current(self, obj):
+        """Get current cattle details."""
+        return CattleDetailSerializer(obj).data
+    
+    def get_parents(self, obj):
+        """Get parent details."""
+        parents = {
+            'father': None,
+            'mother': None
+        }
+        
+        if obj.sire:
+            parents['father'] = CattleBasicSerializer(obj.sire).data
+        if obj.dam:
+            parents['mother'] = CattleBasicSerializer(obj.dam).data
+            
+        return parents
+    
+    def get_grandparents(self, obj):
+        """Get grandparent details."""
+        grandparents = {
+            'paternal_grandfather': None,
+            'paternal_grandmother': None,
+            'maternal_grandfather': None,
+            'maternal_grandmother': None
+        }
+        
+        if obj.sire:
+            if obj.sire.sire:
+                grandparents['paternal_grandfather'] = CattleBasicSerializer(obj.sire.sire).data
+            if obj.sire.dam:
+                grandparents['paternal_grandmother'] = CattleBasicSerializer(obj.sire.dam).data
+                
+        if obj.dam:
+            if obj.dam.sire:
+                grandparents['maternal_grandfather'] = CattleBasicSerializer(obj.dam.sire).data
+            if obj.dam.dam:
+                grandparents['maternal_grandmother'] = CattleBasicSerializer(obj.dam.dam).data
+                
+        return grandparents
+    
+    def get_siblings(self, obj):
+        """Get siblings (cattle sharing same sire or dam)."""
+        siblings = []
+        
+        # Find cattle with same sire or dam, excluding self
+        sibling_query = Q()
+        if obj.sire:
+            sibling_query |= Q(sire=obj.sire)
+        if obj.dam:
+            sibling_query |= Q(dam=obj.dam)
+            
+        if sibling_query:
+            sibling_cattle = Cattle.objects.filter(sibling_query).exclude(id=obj.id).distinct()
+            siblings = CattleBasicSerializer(sibling_cattle, many=True).data
+            
+        return siblings
+    
+    def get_offspring(self, obj):
+        """Get offspring (cattle where this is sire or dam)."""
+        offspring = []
+        
+        if obj.sex in ['bull', 'steer']:
+            # This cattle is a potential sire
+            offspring_cattle = obj.sire_offspring.all()
+        elif obj.sex in ['cow', 'heifer']:
+            # This cattle is a potential dam
+            offspring_cattle = obj.dam_offspring.all()
+        else:
+            offspring_cattle = Cattle.objects.none()
+            
+        if offspring_cattle:
+            offspring = CattleBasicSerializer(offspring_cattle, many=True).data
+            
+        return offspring
 
 
 class WeightLogSerializer(serializers.ModelSerializer):
