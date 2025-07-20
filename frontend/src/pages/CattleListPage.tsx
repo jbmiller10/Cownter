@@ -25,7 +25,7 @@ import {
   Visibility as ViewIcon,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
-import { useCattle } from '../hooks/useCattle'
+import { useCattleList } from '../hooks/useCattle'
 
 export const CattleListPage: React.FC = () => {
   const navigate = useNavigate()
@@ -33,9 +33,9 @@ export const CattleListPage: React.FC = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [searchTerm, setSearchTerm] = useState('')
 
-  const { data, isLoading, error } = useCattle({
+  const { data, isLoading, error } = useCattleList({
     page: page + 1,
-    limit: rowsPerPage,
+    page_size: rowsPerPage,
     search: searchTerm,
   })
 
@@ -124,7 +124,7 @@ export const CattleListPage: React.FC = () => {
               <TableBody>
                 {data?.results?.map((cattle) => (
                   <TableRow key={cattle.id} hover>
-                    <TableCell>{cattle.tag_number || '-'}</TableCell>
+                    <TableCell>{cattle.ear_tag || '-'}</TableCell>
                     <TableCell>{cattle.name || '-'}</TableCell>
                     <TableCell>
                       <Chip
