@@ -17,6 +17,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from authentication.permissions import IsViewerOrAdmin
 from .models import Cattle, Photo, PhotoCattle, WeightLog
 from .serializers import (
     CattleSerializer,
@@ -174,6 +175,7 @@ class CattleViewSet(viewsets.ModelViewSet):
     search_fields: ClassVar[list[str]] = ["tag_number", "name", "color", "breed"]
     ordering_fields: ClassVar[list[str]] = ["tag_number", "name", "dob", "created_at"]
     ordering: ClassVar[list[str]] = ["tag_number"]
+    permission_classes = [IsViewerOrAdmin]
 
     @extend_schema(
         summary="Archive a cattle record",
@@ -296,6 +298,7 @@ class PhotoViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = PhotoFilter
     ordering_fields: ClassVar[list[str]] = ["capture_time", "uploaded_at"]
     ordering: ClassVar[list[str]] = ["-capture_time"]
+    permission_classes = [IsViewerOrAdmin]
 
     def destroy(self, request: Any, *args: Any, **kwargs: Any) -> Response:
         """Delete photo and remove files from disk."""
@@ -404,6 +407,7 @@ class PhotoUploadView(APIView):
 
     parser_classes: ClassVar[list[type]] = [MultiPartParser]
     serializer_class = PhotoUploadSerializer
+    permission_classes = [IsViewerOrAdmin]
 
     def post(self, request: Any) -> Response:
         """Handle photo upload."""
@@ -494,6 +498,7 @@ class WeightLogViewSet(viewsets.GenericViewSet):
 
     serializer_class = WeightLogSerializer
     lookup_field = "pk"
+    permission_classes = [IsViewerOrAdmin]
 
     def get_queryset(self) -> Any:
         """Filter weight logs by cattle ID from URL."""

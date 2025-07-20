@@ -10,8 +10,8 @@ from django.db.models import Count
 from django.http import JsonResponse
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
 
+from authentication.permissions import IsViewerOrAdmin
 from .models import Cattle, WeightLog
 
 if TYPE_CHECKING:
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
+@permission_classes([IsViewerOrAdmin])
 def summary_stats(_request: Request) -> JsonResponse:
     """
     Get summary statistics for the herd.
@@ -70,7 +70,7 @@ def summary_stats(_request: Request) -> JsonResponse:
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
+@permission_classes([IsViewerOrAdmin])
 def color_distribution(_request: Request) -> JsonResponse:
     """
     Get color distribution for active cattle.
@@ -103,7 +103,7 @@ def color_distribution(_request: Request) -> JsonResponse:
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
+@permission_classes([IsViewerOrAdmin])
 def breed_distribution(_request: Request) -> JsonResponse:
     """
     Get breed distribution for active cattle.
@@ -136,7 +136,7 @@ def breed_distribution(_request: Request) -> JsonResponse:
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
+@permission_classes([IsViewerOrAdmin])
 def growth_stats(request: Request) -> JsonResponse:
     """
     Get growth statistics for calves born in a specific year.

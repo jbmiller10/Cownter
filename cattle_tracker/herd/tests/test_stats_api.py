@@ -4,10 +4,9 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from herd.models import Cattle, WeightLog
@@ -21,10 +20,53 @@ def api_client() -> APIClient:
 
 @pytest.fixture()
 def authenticated_client(api_client: APIClient) -> APIClient:
-    """Create an authenticated API client."""
+    """Create an authenticated API client with admin permissions."""
+    # Create a user
     user = User.objects.create_user(username="testuser", password="testpass123")
-    token = Token.objects.create(user=user)
-    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+    
+    # Get or create the admin group and add user to it
+    admin_group, _ = Group.objects.get_or_create(name="admin")
+    user.groups.add(admin_group)
+    
+    # Login to get JWT tokens
+    login_url = reverse("authentication:login")
+    response = api_client.post(
+        login_url,
+        {"username": "testuser", "password": "testpass123"},
+        format="json",
+    )
+    
+    # Extract the access token
+    access_token = response.data["access"]
+    
+    # Set the Authorization header with Bearer token
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access_token}")
+    return api_client
+
+
+@pytest.fixture()
+def viewer_client(api_client: APIClient) -> APIClient:
+    """Create an authenticated API client with viewer permissions."""
+    # Create a user
+    user = User.objects.create_user(username="vieweruser", password="viewerpass123")
+    
+    # Get or create the viewer group and add user to it
+    viewer_group, _ = Group.objects.get_or_create(name="viewer")
+    user.groups.add(viewer_group)
+    
+    # Login to get JWT tokens
+    login_url = reverse("authentication:login")
+    response = api_client.post(
+        login_url,
+        {"username": "vieweruser", "password": "viewerpass123"},
+        format="json",
+    )
+    
+    # Extract the access token
+    access_token = response.data["access"]
+    
+    # Set the Authorization header with Bearer token
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {access_token}")
     return api_client
 
 
@@ -140,10 +182,10 @@ def cattle_with_growth_data() -> list[Cattle]:
 class TestSummaryStatsAPI:
     """Test cases for summary statistics endpoint."""
 
-    def test_summary_stats_empty_db(self, api_client: APIClient) -> None:
+    def test_summary_stats_empty_db(self, authenticated_client: APIClient) -> None:
         """Test summary stats with empty database."""
         url = reverse("stats-summary")
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -156,12 +198,12 @@ class TestSummaryStatsAPI:
 
     def test_summary_stats_with_data(
         self,
-        api_client: APIClient,
+        authenticated_client: APIClient,
         cattle_with_stats: list[Cattle],
     ) -> None:
         """Test summary stats with seeded data."""
         url = reverse("stats-summary")
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -182,21 +224,21 @@ class TestSummaryStatsAPI:
         # Ages in years: 2, 3, 4, 1, 1.5, 0.25 = 11.75/6 ≈ 1.96
         assert 1.8 <= data["avgAge"] <= 2.1  # Allow for date calculation variance
 
-    def test_summary_stats_no_auth_required(self, api_client: APIClient) -> None:
-        """Test that summary stats don't require authentication."""
+    def test_summary_stats_requires_auth(self, api_client: APIClient) -> None:
+        """Test that summary stats require authentication."""
         url = reverse("stats-summary")
         response = api_client.get(url)
-        assert response.status_code == status.HTTP_200_OK
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 @pytest.mark.django_db()
 class TestColorDistributionAPI:
     """Test cases for color distribution endpoint."""
 
-    def test_color_distribution_empty_db(self, api_client: APIClient) -> None:
+    def test_color_distribution_empty_db(self, authenticated_client: APIClient) -> None:
         """Test color distribution with empty database."""
         url = reverse("stats-color")
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -206,12 +248,12 @@ class TestColorDistributionAPI:
 
     def test_color_distribution_with_data(
         self,
-        api_client: APIClient,
+        authenticated_client: APIClient,
         cattle_with_stats: list[Cattle],
     ) -> None:
         """Test color distribution with seeded data."""
         url = reverse("stats-color")
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -236,12 +278,12 @@ class TestColorDistributionAPI:
 
     def test_color_distribution_archived_excluded(
         self,
-        api_client: APIClient,
+        authenticated_client: APIClient,
         cattle_with_stats: list[Cattle],
     ) -> None:
         """Test that archived cattle are excluded from color distribution."""
         url = reverse("stats-color")
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         data = response.json()
         colors = [item["color"] for item in data["distribution"]]
@@ -249,15 +291,21 @@ class TestColorDistributionAPI:
         # White color is only on archived cattle
         assert "White" not in colors
 
+    def test_color_distribution_requires_auth(self, api_client: APIClient) -> None:
+        """Test that color distribution requires authentication."""
+        url = reverse("stats-color")
+        response = api_client.get(url)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
 
 @pytest.mark.django_db()
 class TestBreedDistributionAPI:
     """Test cases for breed distribution endpoint."""
 
-    def test_breed_distribution_empty_db(self, api_client: APIClient) -> None:
+    def test_breed_distribution_empty_db(self, authenticated_client: APIClient) -> None:
         """Test breed distribution with empty database."""
         url = reverse("stats-breed")
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -267,12 +315,12 @@ class TestBreedDistributionAPI:
 
     def test_breed_distribution_with_data(
         self,
-        api_client: APIClient,
+        authenticated_client: APIClient,
         cattle_with_stats: list[Cattle],
     ) -> None:
         """Test breed distribution with seeded data."""
         url = reverse("stats-breed")
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -291,40 +339,46 @@ class TestBreedDistributionAPI:
         # Should be sorted by count descending
         assert data["distribution"][0]["breed"] == "Angus"
 
+    def test_breed_distribution_requires_auth(self, api_client: APIClient) -> None:
+        """Test that breed distribution requires authentication."""
+        url = reverse("stats-breed")
+        response = api_client.get(url)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
 
 @pytest.mark.django_db()
 class TestGrowthStatsAPI:
     """Test cases for growth statistics endpoint."""
 
-    def test_growth_stats_missing_year(self, api_client: APIClient) -> None:
+    def test_growth_stats_missing_year(self, authenticated_client: APIClient) -> None:
         """Test growth stats without year parameter."""
         url = reverse("stats-growth")
-        response = api_client.get(url)
+        response = authenticated_client.get(url)
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "Year parameter is required" in response.json()["error"]
 
-    def test_growth_stats_invalid_year(self, api_client: APIClient) -> None:
+    def test_growth_stats_invalid_year(self, authenticated_client: APIClient) -> None:
         """Test growth stats with invalid year parameter."""
         url = reverse("stats-growth")
 
         # Non-numeric year
-        response = api_client.get(url, {"year": "abc"})
+        response = authenticated_client.get(url, {"year": "abc"})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "Invalid year parameter" in response.json()["error"]
 
         # Year too old
-        response = api_client.get(url, {"year": "1899"})
+        response = authenticated_client.get(url, {"year": "1899"})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
         # Future year
-        response = api_client.get(url, {"year": str(date.today().year + 1)})
+        response = authenticated_client.get(url, {"year": str(date.today().year + 1)})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_growth_stats_no_cattle_in_year(self, api_client: APIClient) -> None:
+    def test_growth_stats_no_cattle_in_year(self, authenticated_client: APIClient) -> None:
         """Test growth stats for year with no cattle."""
         url = reverse("stats-growth")
-        response = api_client.get(url, {"year": "2020"})
+        response = authenticated_client.get(url, {"year": "2020"})
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -335,12 +389,12 @@ class TestGrowthStatsAPI:
 
     def test_growth_stats_with_data(
         self,
-        api_client: APIClient,
+        authenticated_client: APIClient,
         cattle_with_growth_data: list[Cattle],
     ) -> None:
         """Test growth stats with weight log data."""
         url = reverse("stats-growth")
-        response = api_client.get(url, {"year": "2023"})
+        response = authenticated_client.get(url, {"year": "2023"})
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -373,7 +427,7 @@ class TestGrowthStatsAPI:
 
     def test_growth_stats_calculation_accuracy(
         self,
-        api_client: APIClient,
+        authenticated_client: APIClient,
     ) -> None:
         """Test accuracy of growth calculations."""
         # Create specific test data
@@ -402,7 +456,7 @@ class TestGrowthStatsAPI:
         )
 
         url = reverse("stats-growth")
-        response = api_client.get(url, {"year": "2023"})
+        response = authenticated_client.get(url, {"year": "2023"})
 
         data = response.json()
         growth_data = {item["age_months"]: item for item in data["growthData"]}
@@ -418,3 +472,9 @@ class TestGrowthStatsAPI:
             assert growth_data[2]["avg_weight"] == 100.0
         else:
             assert growth_data[3]["avg_weight"] == 100.0
+
+    def test_growth_stats_requires_auth(self, api_client: APIClient) -> None:
+        """Test that growth stats require authentication."""
+        url = reverse("stats-growth")
+        response = api_client.get(url, {"year": "2023"})
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
