@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { apiClient, setAuthTokens, clearAuthTokens, getAuthToken } from '../api/client'
+import {
+  apiClient,
+  setAuthTokens,
+  clearAuthTokens,
+  getAuthToken,
+  setNavigationCallback,
+} from '../api/client'
 import { LoginRequest, LoginResponse, User } from '../types/api'
 
 interface AuthContextValue {
@@ -50,8 +56,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }
 
   useEffect(() => {
-    fetchUser()
-  }, [])
+    // Set up navigation callback for API client
+    setNavigationCallback((path: string) => {
+      navigate(path, { replace: true })
+    })
+
+    void fetchUser()
+  }, [navigate])
 
   const login = async (credentials: LoginRequest) => {
     try {

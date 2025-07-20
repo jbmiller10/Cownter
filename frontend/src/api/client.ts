@@ -4,6 +4,22 @@ const API_BASE_URL = '/api'
 const TOKEN_KEY = 'auth_token'
 const REFRESH_TOKEN_KEY = 'refresh_token'
 
+// Navigation callback for redirecting without window.location
+let navigationCallback: ((path: string) => void) | null = null
+
+export const setNavigationCallback = (callback: (path: string) => void) => {
+  navigationCallback = callback
+}
+
+const redirectToLogin = () => {
+  if (navigationCallback) {
+    navigationCallback('/login')
+  } else {
+    // Fallback for when navigation isn't set up yet
+    window.location.href = '/login'
+  }
+}
+
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -69,7 +85,7 @@ apiClient.interceptors.response.use(
       if (!refreshToken) {
         localStorage.removeItem(TOKEN_KEY)
         localStorage.removeItem(REFRESH_TOKEN_KEY)
-        window.location.href = '/login'
+        redirectToLogin()
         return Promise.reject(error)
       }
 
@@ -92,7 +108,7 @@ apiClient.interceptors.response.use(
         isRefreshing = false
         localStorage.removeItem(TOKEN_KEY)
         localStorage.removeItem(REFRESH_TOKEN_KEY)
-        window.location.href = '/login'
+        redirectToLogin()
         return Promise.reject(refreshError)
       }
     }

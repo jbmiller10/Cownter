@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import {
   AppBar,
   Toolbar,
@@ -77,20 +77,24 @@ export const Layout: React.FC = () => {
     logout()
   }
 
-  const navigationContent = (
-    <List>
-      {navItems.map((item) => (
-        <ListItem key={item.path} disablePadding>
-          <ListItemButton
-            selected={location.pathname === item.path}
-            onClick={() => handleNavigate(item.path)}
-          >
-            <ListItemIcon>{item.icon}</ListItemIcon>
-            <ListItemText primary={item.label} />
-          </ListItemButton>
-        </ListItem>
-      ))}
-    </List>
+  const navigationContent = useMemo(
+    () => (
+      <List>
+        {navItems.map((item) => (
+          <ListItem key={item.path} disablePadding>
+            <ListItemButton
+              selected={location.pathname === item.path}
+              onClick={() => handleNavigate(item.path)}
+              aria-label={`Navigate to ${item.label}`}
+            >
+              <ListItemIcon>{item.icon}</ListItemIcon>
+              <ListItemText primary={item.label} />
+            </ListItemButton>
+          </ListItem>
+        ))}
+      </List>
+    ),
+    [location.pathname, handleNavigate]
   )
 
   return (
@@ -114,7 +118,7 @@ export const Layout: React.FC = () => {
             variant="h6"
             component="div"
             sx={{ flexGrow: 1, cursor: 'pointer' }}
-            onClick={() => navigate('/')}
+            onClick={() => void navigate('/')}
           >
             Kurten Cowner
           </Typography>
@@ -127,6 +131,7 @@ export const Layout: React.FC = () => {
                   color="inherit"
                   startIcon={item.icon}
                   onClick={() => handleNavigate(item.path)}
+                  aria-label={`Navigate to ${item.label}`}
                   sx={{
                     textTransform: 'none',
                     bgcolor:
@@ -139,13 +144,23 @@ export const Layout: React.FC = () => {
             </Box>
           )}
 
-          <IconButton sx={{ ml: 1 }} onClick={toggleColorMode} color="inherit">
+          <IconButton
+            sx={{ ml: 1 }}
+            onClick={toggleColorMode}
+            color="inherit"
+            aria-label={`Switch to ${mode === 'dark' ? 'light' : 'dark'} mode`}
+          >
             {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
           </IconButton>
 
           {user && (
             <>
-              <IconButton onClick={handleUserMenuOpen} sx={{ ml: 1 }} color="inherit">
+              <IconButton
+                onClick={handleUserMenuOpen}
+                sx={{ ml: 1 }}
+                color="inherit"
+                aria-label="User menu"
+              >
                 <Avatar sx={{ width: 32, height: 32 }}>
                   {user.username.charAt(0).toUpperCase()}
                 </Avatar>
@@ -179,7 +194,7 @@ export const Layout: React.FC = () => {
             }}
           >
             <Typography variant="h6">Menu</Typography>
-            <IconButton onClick={() => setDrawerOpen(false)}>
+            <IconButton onClick={() => setDrawerOpen(false)} aria-label="Close navigation menu">
               <CloseIcon />
             </IconButton>
           </Box>

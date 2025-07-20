@@ -25,7 +25,12 @@ import {
   MenuItem,
 } from '@mui/material'
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material'
-import { useWeightLogsList, useCreateWeightLog, useUpdateWeightLog, useDeleteWeightLog } from '../hooks/useWeightLogs'
+import {
+  useWeightLogsList,
+  useCreateWeightLog,
+  useUpdateWeightLog,
+  useDeleteWeightLog,
+} from '../hooks/useWeightLogs'
 import { useCattle } from '../hooks/useCattle'
 
 export const WeightLogsPage: React.FC = () => {

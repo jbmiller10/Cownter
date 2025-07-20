@@ -84,7 +84,9 @@ export const StatsPage: React.FC = () => {
               <Typography color="text.secondary" gutterBottom>
                 Average Age
               </Typography>
-              <Typography variant="h3">{stats?.average_age_months ? (stats.average_age_months / 12).toFixed(1) : 0} yrs</Typography>
+              <Typography variant="h3">
+                {stats?.average_age_months ? (stats.average_age_months / 12).toFixed(1) : 0} yrs
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
