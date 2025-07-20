@@ -271,3 +271,4 @@ cython_debug/
 
 # PyCharm
 .idea/
+*storybook.log
