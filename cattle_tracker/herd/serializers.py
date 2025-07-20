@@ -10,6 +10,10 @@ from .models import Cattle
 class CattleSerializer(serializers.ModelSerializer):
     """Serializer for Cattle model."""
 
+    # Cache valid choices at class level to avoid recreation on each validation
+    VALID_SEX_CHOICES: ClassVar[set[str]] = set(dict(Cattle.SEX_CHOICES).keys())
+    VALID_STATUS_CHOICES: ClassVar[set[str]] = set(dict(Cattle.STATUS_CHOICES).keys())
+
     sire_tag = serializers.CharField(source="sire.tag_number", read_only=True, allow_null=True)
     dam_tag = serializers.CharField(source="dam.tag_number", read_only=True, allow_null=True)
 
@@ -38,19 +42,17 @@ class CattleSerializer(serializers.ModelSerializer):
 
     def validate_sex(self, value: str) -> str:
         """Validate sex choice."""
-        valid_choices = dict(self.Meta.model.SEX_CHOICES).keys()
-        if value not in valid_choices:
+        if value not in self.VALID_SEX_CHOICES:
             raise serializers.ValidationError(
-                f"Invalid sex choice. Must be one of: {', '.join(valid_choices)}",
+                f"Invalid sex choice. Must be one of: {', '.join(sorted(self.VALID_SEX_CHOICES))}",
             )
         return value
 
     def validate_status(self, value: str) -> str:
         """Validate status choice."""
-        valid_choices = dict(self.Meta.model.STATUS_CHOICES).keys()
-        if value not in valid_choices:
+        if value not in self.VALID_STATUS_CHOICES:
             raise serializers.ValidationError(
-                f"Invalid status choice. Must be one of: {', '.join(valid_choices)}",
+                f"Invalid status choice. Must be one of: {', '.join(sorted(self.VALID_STATUS_CHOICES))}",
             )
         return value
 
