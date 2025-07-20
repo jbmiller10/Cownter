@@ -27,6 +27,7 @@
     Containerization – Docker & docker‑compose<br/>
     CI/CD – GitHub Actions → Docker build → VPS deploy<br/>
     Charts – Recharts
+	Dependancy Managment & Enviroments: uv
   </stack>
 
   <success_criteria>
