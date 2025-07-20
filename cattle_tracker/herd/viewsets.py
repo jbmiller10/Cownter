@@ -1,15 +1,34 @@
 """ViewSets for the herd app."""
 
-from typing import ClassVar
+from pathlib import Path
+from typing import Any, ClassVar
 
+from django.db import transaction
 from django_filters import rest_framework as filters
-from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiExample, OpenApiParameter
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiParameter,
+    extend_schema,
+    extend_schema_view,
+)
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from .models import Cattle
-from .serializers import CattleSerializer
+from .models import Cattle, Photo, PhotoCattle
+from .serializers import (
+    CattleSerializer,
+    PhotoSerializer,
+    PhotoTagSerializer,
+    PhotoUploadSerializer,
+)
+from .utils.image_processing import (
+    extract_exif_data,
+    get_capture_time,
+    save_image_derivatives,
+)
 
 
 class CattleFilter(filters.FilterSet):
@@ -88,7 +107,7 @@ class CattleFilter(filters.FilterSet):
                             "dam_tag": None,
                             "created_at": "2024-01-01T00:00:00Z",
                             "updated_at": "2024-01-01T00:00:00Z",
-                        }
+                        },
                     ],
                 },
                 response_only=True,
@@ -136,7 +155,7 @@ class CattleFilter(filters.FilterSet):
 class CattleViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Cattle model supporting all CRUD operations.
-    
+
     Provides endpoints for managing cattle records including:
     - Listing with pagination, filtering, and search
     - Creating new cattle records
@@ -144,7 +163,7 @@ class CattleViewSet(viewsets.ModelViewSet):
     - Updating cattle information
     - Deleting cattle records
     - Archiving cattle (custom action)
-    
+
     All endpoints require authentication via Token or Session.
     """
 
@@ -157,7 +176,7 @@ class CattleViewSet(viewsets.ModelViewSet):
 
     @extend_schema(
         summary="Archive a cattle record",
-        description="Set the status of a cattle record to 'archived'. This is a soft delete operation.",
+        description="Set cattle status to 'archived'. This is a soft delete operation.",
         responses={
             204: None,
             404: {"description": "Cattle not found"},
@@ -173,19 +192,247 @@ class CattleViewSet(viewsets.ModelViewSet):
         ],
     )
     @action(detail=True, methods=["post"])
-    def archive(self, request, pk=None):  # noqa: ARG002
+    def archive(self, request: Any, pk: int | None = None) -> Response:  # noqa: ARG002
         """
         Archive a cattle record by setting its status to 'archived'.
-        
+
         This is a soft delete operation that preserves the record in the database
         but marks it as archived. Archived cattle will still appear in queries
         when filtering by status='archived'.
-        
-        Returns:
+
+        Returns
+        -------
             Response: Empty response with 204 No Content status
+
         """
         cattle = self.get_object()
         cattle.status = "archived"
         cattle.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PhotoFilter(filters.FilterSet):
+    """Filter class for Photo queryset."""
+
+    capture_date = filters.DateFilter(field_name="capture_time__date")
+    capture_date_gte = filters.DateFilter(field_name="capture_time__date", lookup_expr="gte")
+    capture_date_lte = filters.DateFilter(field_name="capture_time__date", lookup_expr="lte")
+    has_cattle = filters.BooleanFilter(method="filter_has_cattle")
+
+    class Meta:
+        """Meta options for PhotoFilter."""
+
+        model = Photo
+        fields: ClassVar[list[str]] = [
+            "capture_date",
+            "capture_date_gte",
+            "capture_date_lte",
+            "has_cattle",
+        ]
+
+    def filter_has_cattle(self, queryset: Any, name: str, value: bool) -> Any:  # noqa: ARG002
+        """Filter photos based on whether they have tagged cattle."""
+        if value:
+            return queryset.filter(photocattle__isnull=False).distinct()
+        return queryset.filter(photocattle__isnull=True)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List all photos",
+        description="Retrieve a paginated list of photos with optional filtering.",
+        parameters=[
+            OpenApiParameter(
+                name="capture_date",
+                description="Filter by exact capture date (YYYY-MM-DD)",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="capture_date_gte",
+                description="Filter by capture date (greater than or equal)",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="capture_date_lte",
+                description="Filter by capture date (less than or equal)",
+                required=False,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="has_cattle",
+                description="Filter by whether photo has tagged cattle",
+                required=False,
+                type=bool,
+            ),
+        ],
+    ),
+    retrieve=extend_schema(
+        summary="Get photo details",
+        description="Retrieve detailed information about a specific photo by ID.",
+    ),
+    destroy=extend_schema(
+        summary="Delete photo",
+        description="Permanently delete a photo and its derivatives from the system.",
+    ),
+)
+class PhotoViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for Photo model providing read and delete operations.
+
+    Provides endpoints for:
+    - Listing photos with pagination and filtering
+    - Retrieving photo details including tagged cattle
+    - Deleting photos (also removes files from disk)
+    - Tagging cattle in photos (custom action)
+
+    Upload is handled by a separate PhotoUploadView.
+    """
+
+    queryset = Photo.objects.select_related("uploaded_by").prefetch_related("photocattle_set")
+    serializer_class = PhotoSerializer
+    filterset_class = PhotoFilter
+    ordering_fields: ClassVar[list[str]] = ["capture_time", "uploaded_at"]
+    ordering: ClassVar[list[str]] = ["-capture_time"]
+
+    def destroy(self, request: Any, *args: Any, **kwargs: Any) -> Response:
+        """Delete photo and remove files from disk."""
+        photo = self.get_object()
+
+        # Store file paths before deletion
+        file_paths = []
+        if photo.file_path:
+            file_path = Path(photo.file_path.path)
+            file_paths.append(file_path)
+            # Also delete derivatives
+            base_path = file_path.parent
+            file_paths.extend([
+                base_path / "display_1280.jpg",
+                base_path / "thumb_300.jpg",
+            ])
+
+        # Delete from database
+        photo.delete()
+
+        # Delete files from disk
+        for file_path in file_paths:
+            if file_path.exists():
+                file_path.unlink()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(
+        summary="Tag cattle in photo",
+        description="Add or update cattle tags for a photo. This operation is idempotent.",
+        request=PhotoTagSerializer,
+        responses={
+            200: PhotoSerializer,
+            400: {"description": "Invalid cattle IDs"},
+        },
+        examples=[
+            OpenApiExample(
+                "Tag cattle in photo",
+                value={"cattle_ids": [1, 2, 3]},
+                request_only=True,
+            ),
+        ],
+    )
+    @action(detail=True, methods=["post"], url_path="tags")
+    def tags(self, request: Any, pk: int | None = None) -> Response:  # noqa: ARG002
+        """
+        Tag cattle in a photo.
+
+        This endpoint replaces all existing tags with the provided cattle IDs.
+        To remove all tags, send an empty list.
+        """
+        photo = self.get_object()
+        serializer = PhotoTagSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        cattle_ids = serializer.validated_data["cattle_ids"]
+
+        with transaction.atomic():
+            # Remove existing tags
+            PhotoCattle.objects.filter(photo=photo).delete()
+
+            # Add new tags
+            for cattle_id in cattle_ids:
+                PhotoCattle.objects.create(photo=photo, cattle_id=cattle_id)
+
+        # Return updated photo
+        photo.refresh_from_db()
+        return Response(
+            PhotoSerializer(photo, context={"request": request}).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+@extend_schema(
+    summary="Upload a photo",
+    description="Upload a cattle photo with automatic EXIF extraction and derivative generation.",
+    request=PhotoUploadSerializer,
+    responses={
+        201: PhotoSerializer,
+        400: {"description": "Invalid image format or size"},
+    },
+    examples=[
+        OpenApiExample(
+            "Successful upload",
+            value={
+                "id": 1,
+                "thumb_url": "http://api.example.com/media/2024/01/uuid/thumb_300.jpg",
+                "capture_time": "2024-01-15T14:30:00Z",
+            },
+            response_only=True,
+            status_codes=["201"],
+        ),
+    ],
+)
+class PhotoUploadView(APIView):
+    """
+    Custom view for handling photo uploads.
+
+    Accepts multipart/form-data with an image file (JPEG or HEIC).
+    Automatically:
+    - Validates file size and format
+    - Extracts EXIF data including capture time
+    - Creates display (1280px) and thumbnail (300px) versions
+    - Organizes files by date and UUID
+    """
+
+    parser_classes: ClassVar[list[type]] = [MultiPartParser]
+    serializer_class = PhotoUploadSerializer
+
+    def post(self, request: Any) -> Response:
+        """Handle photo upload."""
+        serializer = PhotoUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        image_file = serializer.validated_data["image"]
+
+        # Extract EXIF data
+        exif_data = extract_exif_data(image_file)
+        capture_time = get_capture_time(exif_data)
+
+        # Save image derivatives
+        image_paths = save_image_derivatives(image_file, capture_time)
+
+        # Create Photo instance
+        photo = Photo.objects.create(
+            file_path=image_paths["original"],
+            capture_time=capture_time,
+            exif=exif_data,
+            uploaded_by=request.user,
+        )
+
+        # Return simplified response
+        return Response(
+            {
+                "id": photo.id,
+                "capture_time": photo.capture_time,
+                "thumb_url": request.build_absolute_uri(f"/media/{image_paths['thumbnail']}"),
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
