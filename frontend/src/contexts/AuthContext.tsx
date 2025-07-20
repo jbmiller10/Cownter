@@ -1,82 +1,82 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { apiClient, setAuthTokens, clearAuthTokens, getAuthToken } from '../api/client';
-import { LoginRequest, LoginResponse, User } from '../types/api';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { apiClient, setAuthTokens, clearAuthTokens, getAuthToken } from '../api/client'
+import { LoginRequest, LoginResponse, User } from '../types/api'
 
 interface AuthContextValue {
-  user: User | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  login: (credentials: LoginRequest) => Promise<void>;
-  logout: () => void;
-  refreshUser: () => Promise<void>;
+  user: User | null
+  isAuthenticated: boolean
+  isLoading: boolean
+  login: (credentials: LoginRequest) => Promise<void>
+  logout: () => void
+  refreshUser: () => Promise<void>
 }
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
+  const context = useContext(AuthContext)
   if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
+    throw new Error('useAuth must be used within AuthProvider')
   }
-  return context;
-};
+  return context
+}
 
 interface AuthProviderProps {
-  children: ReactNode;
+  children: ReactNode
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const navigate = useNavigate();
+  const [user, setUser] = useState<User | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const navigate = useNavigate()
 
   const fetchUser = async () => {
     try {
-      const token = getAuthToken();
+      const token = getAuthToken()
       if (!token) {
-        setIsLoading(false);
-        return;
+        setIsLoading(false)
+        return
       }
 
-      const { data } = await apiClient.get<User>('/auth/user/');
-      setUser(data);
+      const { data } = await apiClient.get<User>('/auth/user/')
+      setUser(data)
     } catch (error) {
-      console.error('Failed to fetch user:', error);
-      clearAuthTokens();
+      console.error('Failed to fetch user:', error)
+      clearAuthTokens()
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   useEffect(() => {
-    fetchUser();
-  }, []);
+    fetchUser()
+  }, [])
 
   const login = async (credentials: LoginRequest) => {
     try {
-      const { data } = await apiClient.post<LoginResponse>('/auth/login/', credentials);
-      setAuthTokens(data.access, data.refresh);
-      
-      const userResponse = await apiClient.get<User>('/auth/user/');
-      setUser(userResponse.data);
-      
-      navigate('/');
+      const { data } = await apiClient.post<LoginResponse>('/auth/login/', credentials)
+      setAuthTokens(data.access, data.refresh)
+
+      const userResponse = await apiClient.get<User>('/auth/user/')
+      setUser(userResponse.data)
+
+      navigate('/')
     } catch (error: any) {
-      clearAuthTokens();
-      throw new Error(error.response?.data?.detail || 'Invalid credentials');
+      clearAuthTokens()
+      throw new Error(error.response?.data?.detail || 'Invalid credentials')
     }
-  };
+  }
 
   const logout = () => {
-    clearAuthTokens();
-    setUser(null);
-    navigate('/login');
-  };
+    clearAuthTokens()
+    setUser(null)
+    navigate('/login')
+  }
 
   const refreshUser = async () => {
-    await fetchUser();
-  };
+    await fetchUser()
+  }
 
   const value: AuthContextValue = {
     user,
@@ -85,7 +85,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     login,
     logout,
     refreshUser,
-  };
+  }
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
