@@ -30,7 +30,7 @@ class CattleFilter(filters.FilterSet):
 class CattleViewSet(viewsets.ModelViewSet):
     """ViewSet for Cattle model supporting all CRUD operations."""
 
-    queryset = Cattle.objects.all()
+    queryset = Cattle.objects.select_related("sire", "dam").all()
     serializer_class = CattleSerializer
     filterset_class = CattleFilter
     search_fields: ClassVar[list[str]] = ["tag_number", "name", "color", "breed"]
