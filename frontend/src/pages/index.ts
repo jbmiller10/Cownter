@@ -1,6 +1,7 @@
 export { LoginPage } from './LoginPage'
 export { DashboardPage } from './DashboardPage'
 export { CattleListPage } from './CattleListPage'
+export { CattleDetailPage } from './CattleDetailPage'
 export { PhotosPage } from './PhotosPage'
 export { StatsPage } from './StatsPage'
 export { WeightLogsPage } from './WeightLogsPage'

@@ -30,6 +30,9 @@ const NotFoundPage = React.lazy(() =>
 const HerdListView = React.lazy(() =>
   import('./components/HerdListView').then((m) => ({ default: m.HerdListView }))
 )
+const CattleDetailPage = React.lazy(() =>
+  import('./pages/CattleDetailPage').then((m) => ({ default: m.CattleDetailPage }))
+)
 
 // Loading component for lazy-loaded routes
 const PageLoader: React.FC = () => (
@@ -87,7 +90,7 @@ function App() {
             path="cattle/:id"
             element={
               <Suspense fallback={<PageLoader />}>
-                <div>Cattle Detail Page - Coming Soon</div>
+                <CattleDetailPage />
               </Suspense>
             }
           />
