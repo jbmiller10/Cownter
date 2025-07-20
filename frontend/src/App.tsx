@@ -8,10 +8,18 @@ import {
   Card,
   CardContent,
   Grid,
+  IconButton,
 } from '@mui/material'
-import { Pets as PetsIcon } from '@mui/icons-material'
+import {
+  Pets as PetsIcon,
+  LightMode as LightModeIcon,
+  DarkMode as DarkModeIcon,
+} from '@mui/icons-material'
+import { useTheme } from './theme/useTheme'
 
 function App() {
+  const { mode, toggleColorMode } = useTheme()
+
   return (
     <Box sx={{ flexGrow: 1 }}>
       <AppBar position="static">
@@ -20,9 +28,12 @@ function App() {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Kurten Cowner
           </Typography>
+          <IconButton sx={{ ml: 1 }} onClick={toggleColorMode} color="inherit">
+            {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
+          </IconButton>
         </Toolbar>
       </AppBar>
-      
+
       <Container maxWidth="lg" sx={{ mt: 4 }}>
         <Grid container spacing={3}>
           <Grid item xs={12}>
@@ -32,14 +43,14 @@ function App() {
                   Welcome to Kurten Cowner
                 </Typography>
                 <Typography variant="body1" color="text.secondary">
-                  Your cattle herd management system is ready! This application helps you
-                  track cattle records, manage lineage, upload photos, and generate
-                  comprehensive herd statistics.
+                  Your cattle herd management system is ready! This application helps you track
+                  cattle records, manage lineage, upload photos, and generate comprehensive herd
+                  statistics.
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
-          
+
           <Grid item xs={12} md={4}>
             <Card>
               <CardContent>
@@ -53,7 +64,7 @@ function App() {
               </CardContent>
             </Card>
           </Grid>
-          
+
           <Grid item xs={12} md={4}>
             <Card>
               <CardContent>
@@ -66,7 +77,7 @@ function App() {
               </CardContent>
             </Card>
           </Grid>
-          
+
           <Grid item xs={12} md={4}>
             <Card>
               <CardContent>
