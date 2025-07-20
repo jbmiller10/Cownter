@@ -92,3 +92,24 @@ class PhotoCattle(models.Model):
     def __str__(self) -> str:
         """Return string representation of photo-cattle relationship."""
         return f"{self.photo} - {self.cattle}"
+
+
+class WeightLog(models.Model):
+    """Model representing a weight measurement for cattle."""
+
+    cattle = models.ForeignKey(Cattle, on_delete=models.CASCADE, related_name="weight_logs")
+    measured_at = models.DateField()
+    weight_kg = models.DecimalField(max_digits=5, decimal_places=1)
+    method = models.CharField(max_length=24)
+
+    class Meta:
+        """Meta options for WeightLog model."""
+
+        unique_together: ClassVar[list[list[str]]] = [["cattle", "measured_at"]]
+        ordering: ClassVar[list[str]] = ["measured_at"]
+        verbose_name = "Weight log"
+        verbose_name_plural = "Weight logs"
+
+    def __str__(self) -> str:
+        """Return string representation of weight log."""
+        return f"{self.cattle.tag_number} - {self.measured_at} - {self.weight_kg}kg"

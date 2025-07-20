@@ -4,7 +4,7 @@ from typing import ClassVar
 
 from django.contrib import admin
 
-from .models import Cattle, Photo, PhotoCattle
+from .models import Cattle, Photo, PhotoCattle, WeightLog
 
 
 class PhotoCattleInline(admin.TabularInline):
@@ -12,6 +12,15 @@ class PhotoCattleInline(admin.TabularInline):
 
     model = PhotoCattle
     extra = 1
+
+
+class WeightLogInline(admin.TabularInline):
+    """Inline admin for WeightLog entries."""
+
+    model = WeightLog
+    extra = 1
+    fields: ClassVar[list[str]] = ["measured_at", "weight_kg", "method"]
+    ordering: ClassVar[list[str]] = ["-measured_at"]
 
 
 @admin.register(Cattle)
@@ -60,7 +69,7 @@ class CattleAdmin(admin.ModelAdmin):
             },
         ),
     ]
-    inlines: ClassVar[list] = [PhotoCattleInline]
+    inlines: ClassVar[list] = [PhotoCattleInline, WeightLogInline]
 
 
 @admin.register(Photo)
