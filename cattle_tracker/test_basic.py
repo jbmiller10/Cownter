@@ -3,9 +3,9 @@ Basic tests to ensure Django setup is working correctly.
 """
 
 import pytest
+from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
-from django.contrib.auth.models import User
 
 
 class BasicTestCase(TestCase):
@@ -24,13 +24,13 @@ class BasicTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
-@pytest.mark.django_db
+@pytest.mark.django_db()
 def test_user_creation():
     """Test user creation works correctly."""
     user = User.objects.create_user(
         username="testuser",
         email="test@example.com",
-        password="testpass123"
+        password="testpass123",
     )
     assert user.username == "testuser"
     assert user.email == "test@example.com"

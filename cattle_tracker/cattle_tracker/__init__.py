@@ -1,0 +1,1 @@
+"""Cattle tracker Django project."""
