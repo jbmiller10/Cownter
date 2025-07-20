@@ -20,7 +20,7 @@ services:
   web:
     build: ./cattle_tracker
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
       - ./cattle_tracker:/app
       - media_volume:/app/media
@@ -50,7 +50,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_URL=http://localhost:8001
     stdin_open: true
     tty: true
 
