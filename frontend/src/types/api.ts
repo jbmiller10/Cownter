@@ -3,6 +3,7 @@ export interface Cattle {
   name: string
   ear_tag: string
   color: string
+  breed: string
   sex: 'M' | 'F'
   date_of_birth: string
   horn_status: 'HORNED' | 'POLLED' | 'SCURRED' | 'DEHORNED'
@@ -110,4 +111,36 @@ export interface WeightGrowthData {
 
 export interface CattleWithGrowth extends Cattle {
   growth_data: WeightGrowthData[]
+}
+
+// Basic cattle info for lineage display
+export interface CattleBasic {
+  id: string
+  ear_tag: string
+  name: string
+  sex: 'M' | 'F'
+  date_of_birth?: string
+  color: string
+  breed: string
+  horn_status: string
+  age_in_months: number
+  created_at: string
+  updated_at: string
+}
+
+// Lineage response structure
+export interface CattleLineage {
+  current: Cattle
+  parents: {
+    father: CattleBasic | null
+    mother: CattleBasic | null
+  }
+  grandparents: {
+    paternal_grandfather: CattleBasic | null
+    paternal_grandmother: CattleBasic | null
+    maternal_grandfather: CattleBasic | null
+    maternal_grandmother: CattleBasic | null
+  }
+  siblings: CattleBasic[]
+  offspring: CattleBasic[]
 }
