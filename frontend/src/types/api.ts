@@ -6,6 +6,7 @@ export interface Cattle {
   sex: 'M' | 'F'
   date_of_birth: string
   horn_status: 'HORNED' | 'POLLED' | 'SCURRED' | 'DEHORNED'
+  status?: 'active' | 'archived'
   mother?: string
   mother_details?: Cattle
   father?: string

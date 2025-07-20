@@ -94,3 +94,16 @@ export const useCattleLineage = (id: string) => {
     enabled: !!id,
   })
 }
+
+export const useArchiveCattle = () => {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.post(`/cattle/${id}/archive/`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CATTLE_QUERY_KEY] })
+    },
+  })
+}
