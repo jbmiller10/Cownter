@@ -2,7 +2,7 @@
 
 [![Lint & Tests](https://github.com/your-username/kurten-cowner/workflows/lint-test/badge.svg?branch=main)](https://github.com/your-username/kurten-cowner/actions?query=workflow%3Alint-test+branch%3Amain)
 
-A fun-but-functional web application for managing a 20-50 head cattle herd. Track cattle records, lineage, photos with EXIF data, and generate herd statistics dashboards.
+A web application for managing a 20-50 head cattle herd. Track cattle records, lineage, photos with EXIF data, and generate herd statistics dashboards.
 
 ## Features
 
