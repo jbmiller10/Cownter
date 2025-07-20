@@ -29,7 +29,7 @@ export interface Photo {
   caption?: string
   tags: string[]
   taken_at?: string
-  exif_data?: Record<string, any>
+  exif_data?: Record<string, string | number | boolean>
   created_at: string
   updated_at: string
 }
@@ -45,38 +45,55 @@ export interface WeightLog {
   updated_at: string
 }
 
+// Statistics types
 export interface ColorDistribution {
   color: string
   count: number
   percentage: number
 }
 
-export interface SexDistribution {
-  sex: string
+export interface BreedDistribution {
+  breed: string
   count: number
   percentage: number
 }
 
-export interface HornStatusDistribution {
-  horn_status: string
-  count: number
-  percentage: number
+export interface SummaryStats {
+  totals: {
+    total: number
+    active: number
+    archived: number
+  }
+  bySex: {
+    cow: number
+    bull: number
+    steer: number
+    heifer: number
+    calf: number
+  }
+  avgAge: number
 }
 
-export interface MonthlyBirthCount {
-  month: string
+export interface ColorDistributionResponse {
+  total: number
+  distribution: ColorDistribution[]
+}
+
+export interface BreedDistributionResponse {
+  total: number
+  distribution: BreedDistribution[]
+}
+
+export interface GrowthDataPoint {
+  age_months: number
+  avg_weight: number
   count: number
 }
 
-export interface HerdStatistics {
-  total_cattle: number
-  color_distribution: ColorDistribution[]
-  sex_distribution: SexDistribution[]
-  horn_status_distribution: HornStatusDistribution[]
-  average_age_months: number
-  oldest_cattle?: Cattle
-  youngest_cattle?: Cattle
-  monthly_births: MonthlyBirthCount[]
+export interface GrowthStatsResponse {
+  year: number
+  cattleCount: number
+  growthData: GrowthDataPoint[]
 }
 
 export interface LoginRequest {
