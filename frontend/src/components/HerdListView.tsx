@@ -49,7 +49,11 @@ export const HerdListView: React.FC = () => {
   })
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [selectedCattleId, setSelectedCattleId] = useState<string | null>(null)
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' })
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success' as 'success' | 'error',
+  })
 
   const { data, isLoading, error } = useCattleList({
     page: paginationModel.page + 1,
@@ -155,7 +159,7 @@ export const HerdListView: React.FC = () => {
       width: 120,
       filterable: true,
       valueGetter: (params) => {
-        return params.value ? new Date(params.value).toLocaleDateString() : '-'
+        return params.row.date_of_birth ? new Date(params.row.date_of_birth).toLocaleDateString() : '-'
       },
     },
     {

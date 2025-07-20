@@ -21,6 +21,8 @@ from authentication.permissions import IsViewerOrAdmin
 from .models import Cattle, Photo, PhotoCattle, WeightLog
 from .serializers import (
     CattleSerializer,
+    CattleDetailSerializer,
+    CattleLineageSerializer,
     PhotoSerializer,
     PhotoTagSerializer,
     PhotoUploadSerializer,
@@ -165,17 +167,25 @@ class CattleViewSet(viewsets.ModelViewSet):
     - Updating cattle information
     - Deleting cattle records
     - Archiving cattle (custom action)
+    - Lineage information (custom action)
 
     All endpoints require authentication via Token or Session.
     """
 
     queryset = Cattle.objects.select_related("sire", "dam").all()
-    serializer_class = CattleSerializer
+    serializer_class = CattleSerializer  # Default serializer
     filterset_class = CattleFilter
     search_fields: ClassVar[list[str]] = ["tag_number", "name", "color", "breed"]
     ordering_fields: ClassVar[list[str]] = ["tag_number", "name", "dob", "created_at"]
     ordering: ClassVar[list[str]] = ["tag_number"]
     permission_classes = [IsViewerOrAdmin]
+    
+    def get_serializer_class(self):
+        """Use different serializers for different actions."""
+        if self.action in ['retrieve', 'lineage']:
+            # Use frontend-compatible serializer for detail views
+            return CattleDetailSerializer
+        return CattleSerializer
 
     @extend_schema(
         summary="Archive a cattle record",
@@ -212,6 +222,106 @@ class CattleViewSet(viewsets.ModelViewSet):
         cattle.status = "archived"
         cattle.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(
+        summary="Get cattle lineage information",
+        description="Retrieve comprehensive lineage information for a cattle including parents, grandparents, siblings, and offspring.",
+        responses={
+            200: CattleLineageSerializer,
+            404: {"description": "Cattle not found"},
+        },
+        examples=[
+            OpenApiExample(
+                "Lineage with full family tree",
+                value={
+                    "current": {
+                        "id": 1,
+                        "ear_tag": "C001",
+                        "name": "Bessie",
+                        "sex": "F",
+                        "date_of_birth": "2020-01-15",
+                        "color": "Brown",
+                        "breed": "Angus",
+                        "horn_status": "POLLED",
+                        "status": "active"
+                    },
+                    "parents": {
+                        "father": {
+                            "id": 5,
+                            "ear_tag": "B005",
+                            "name": "Thunder",
+                            "sex": "M"
+                        },
+                        "mother": {
+                            "id": 3,
+                            "ear_tag": "C003",
+                            "name": "Daisy",
+                            "sex": "F"
+                        }
+                    },
+                    "grandparents": {
+                        "paternal_grandfather": None,
+                        "paternal_grandmother": None,
+                        "maternal_grandfather": {
+                            "id": 8,
+                            "ear_tag": "B008",
+                            "name": "Rex",
+                            "sex": "M"
+                        },
+                        "maternal_grandmother": {
+                            "id": 9,
+                            "ear_tag": "C009",
+                            "name": "Rose",
+                            "sex": "F"
+                        }
+                    },
+                    "siblings": [
+                        {
+                            "id": 2,
+                            "ear_tag": "C002",
+                            "name": "Bella",
+                            "sex": "F"
+                        }
+                    ],
+                    "offspring": []
+                },
+                response_only=True,
+            ),
+        ],
+    )
+    @action(detail=True, methods=["get"])
+    def lineage(self, request: Any, pk: int | None = None) -> Response:  # noqa: ARG002
+        """
+        Get comprehensive lineage information for a cattle.
+
+        This endpoint provides a complete family tree including:
+        - Current cattle details
+        - Parents (sire and dam)
+        - Grandparents (if available)
+        - Siblings (cattle sharing same sire or dam)
+        - Offspring (cattle where this is sire or dam)
+
+        The queryset is optimized to minimize database queries by using
+        select_related and prefetch_related where appropriate.
+
+        Returns
+        -------
+            Response: Lineage data with nested family information
+
+        """
+        cattle = self.get_object()
+        
+        # Optimize queries by prefetching related data
+        cattle = Cattle.objects.select_related(
+            'sire', 'dam',
+            'sire__sire', 'sire__dam',
+            'dam__sire', 'dam__dam'
+        ).prefetch_related(
+            'sire_offspring', 'dam_offspring'
+        ).get(pk=cattle.pk)
+        
+        serializer = CattleLineageSerializer(cattle)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class PhotoFilter(filters.FilterSet):

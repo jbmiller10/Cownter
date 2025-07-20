@@ -3,11 +3,11 @@
 from datetime import date
 
 import pytest
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from herd.models import Cattle
 
@@ -29,8 +29,23 @@ def api_client() -> APIClient:
 def authenticated_client(api_client: APIClient) -> APIClient:
     """Create an authenticated API client."""
     user = User.objects.create_user(username="testuser", password=DEFAULT_PASSWORD)
-    token = Token.objects.create(user=user)
-    api_client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+    # Add user to viewer group for read permissions
+    viewer_group, _ = Group.objects.get_or_create(name="viewer")
+    user.groups.add(viewer_group)
+    refresh = RefreshToken.for_user(user)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
+    return api_client
+
+
+@pytest.fixture()
+def admin_client(api_client: APIClient) -> APIClient:
+    """Create an authenticated API client with admin permissions."""
+    user = User.objects.create_user(username="adminuser", password=DEFAULT_PASSWORD)
+    # Add user to admin group for full permissions
+    admin_group, _ = Group.objects.get_or_create(name="admin")
+    user.groups.add(admin_group)
+    refresh = RefreshToken.for_user(user)
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
     return api_client
 
 
@@ -75,7 +90,7 @@ class TestCattleListAPI:
         """Test that unauthenticated requests are rejected."""
         url = reverse("cattle-list")
         response = api_client.get(url)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_list_cattle_authenticated(
         self,
@@ -204,7 +219,7 @@ class TestCattleRetrieveAPI:
         """Test that unauthenticated requests are rejected."""
         url = reverse("cattle-detail", kwargs={"pk": sample_cattle.pk})
         response = api_client.get(url)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_retrieve_cattle_authenticated(
         self,
@@ -215,7 +230,7 @@ class TestCattleRetrieveAPI:
         url = reverse("cattle-detail", kwargs={"pk": sample_cattle.pk})
         response = authenticated_client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data["tag_number"] == "T001"
+        assert response.data["ear_tag"] == "T001"
         assert response.data["name"] == "Test Cow"
 
     def test_retrieve_cattle_not_found(self, authenticated_client: APIClient) -> None:
@@ -245,10 +260,10 @@ class TestCattleRetrieveAPI:
         url = reverse("cattle-detail", kwargs={"pk": calf.pk})
         response = authenticated_client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data["sire"] == sire.pk
-        assert response.data["sire_tag"] == "S001"
-        assert response.data["dam"] == dam.pk
-        assert response.data["dam_tag"] == "D001"
+        assert response.data["father"] == sire.pk
+        assert response.data["father_details"]["ear_tag"] == "S001"
+        assert response.data["mother"] == dam.pk
+        assert response.data["mother_details"]["ear_tag"] == "D001"
 
 
 @pytest.mark.django_db()
@@ -266,9 +281,9 @@ class TestCattleCreateAPI:
             "horn_status": "Polled",
         }
         response = api_client.post(url, data)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_create_cattle_authenticated(self, authenticated_client: APIClient) -> None:
+    def test_create_cattle_authenticated(self, admin_client: APIClient) -> None:
         """Test creating cattle with valid data."""
         url = reverse("cattle-list")
         data = {
@@ -280,7 +295,7 @@ class TestCattleCreateAPI:
             "breed": "Jersey",
             "horn_status": "Polled",
         }
-        response = authenticated_client.post(url, data)
+        response = admin_client.post(url, data)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["tag_number"] == "NEW001"
         assert response.data["name"] == "New Cow"
@@ -290,7 +305,7 @@ class TestCattleCreateAPI:
         cattle = Cattle.objects.get(tag_number="NEW001")
         assert cattle.name == "New Cow"
 
-    def test_create_cattle_minimal_data(self, authenticated_client):
+    def test_create_cattle_minimal_data(self, admin_client):
         """Test creating cattle with minimal required data."""
         url = reverse("cattle-list")
         data = {
@@ -300,11 +315,11 @@ class TestCattleCreateAPI:
             "breed": "Hereford",
             "horn_status": "Horned",
         }
-        response = authenticated_client.post(url, data)
+        response = admin_client.post(url, data)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["name"] == ""  # Blank by default
 
-    def test_create_cattle_duplicate_tag(self, authenticated_client, sample_cattle):
+    def test_create_cattle_duplicate_tag(self, admin_client, sample_cattle):
         """Test creating cattle with duplicate tag number fails."""
         url = reverse("cattle-list")
         data = {
@@ -314,11 +329,11 @@ class TestCattleCreateAPI:
             "breed": "Angus",
             "horn_status": "Polled",
         }
-        response = authenticated_client.post(url, data)
+        response = admin_client.post(url, data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "tag_number" in response.data
 
-    def test_create_cattle_invalid_sex(self, authenticated_client):
+    def test_create_cattle_invalid_sex(self, admin_client):
         """Test creating cattle with invalid sex choice."""
         url = reverse("cattle-list")
         data = {
@@ -328,11 +343,11 @@ class TestCattleCreateAPI:
             "breed": "Angus",
             "horn_status": "Polled",
         }
-        response = authenticated_client.post(url, data)
+        response = admin_client.post(url, data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "sex" in response.data
 
-    def test_create_cattle_with_lineage(self, authenticated_client):
+    def test_create_cattle_with_lineage(self, admin_client):
         """Test creating cattle with sire and dam."""
         sire = Cattle.objects.create(
             tag_number="S002", sex="bull", color="Black", breed="Angus", horn_status="Polled",
@@ -351,12 +366,12 @@ class TestCattleCreateAPI:
             "sire": sire.pk,
             "dam": dam.pk,
         }
-        response = authenticated_client.post(url, data)
+        response = admin_client.post(url, data)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["sire"] == sire.pk
         assert response.data["dam"] == dam.pk
 
-    def test_create_cattle_invalid_sire_sex(self, authenticated_client):
+    def test_create_cattle_invalid_sire_sex(self, admin_client):
         """Test creating cattle with non-bull/steer as sire fails."""
         invalid_sire = Cattle.objects.create(
             tag_number="INV_S", sex="cow", color="Brown", breed="Angus", horn_status="Polled",
@@ -371,11 +386,11 @@ class TestCattleCreateAPI:
             "horn_status": "Polled",
             "sire": invalid_sire.pk,
         }
-        response = authenticated_client.post(url, data)
+        response = admin_client.post(url, data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "sire" in response.data
 
-    def test_create_cattle_invalid_dam_sex(self, authenticated_client):
+    def test_create_cattle_invalid_dam_sex(self, admin_client):
         """Test creating cattle with non-cow/heifer as dam fails."""
         invalid_dam = Cattle.objects.create(
             tag_number="INV_D", sex="bull", color="Black", breed="Angus", horn_status="Polled",
@@ -390,11 +405,11 @@ class TestCattleCreateAPI:
             "horn_status": "Polled",
             "dam": invalid_dam.pk,
         }
-        response = authenticated_client.post(url, data)
+        response = admin_client.post(url, data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "dam" in response.data
 
-    def test_create_cattle_invalid_status(self, authenticated_client):
+    def test_create_cattle_invalid_status(self, admin_client):
         """Test creating cattle with invalid status choice."""
         url = reverse("cattle-list")
         data = {
@@ -405,7 +420,7 @@ class TestCattleCreateAPI:
             "horn_status": "Polled",
             "status": "invalid_status",
         }
-        response = authenticated_client.post(url, data)
+        response = admin_client.post(url, data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "status" in response.data
 
@@ -419,13 +434,13 @@ class TestCattleUpdateAPI:
         url = reverse("cattle-detail", kwargs={"pk": sample_cattle.pk})
         data = {"name": "Updated Name"}
         response = api_client.patch(url, data)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_partial_update_cattle(self, authenticated_client, sample_cattle):
+    def test_partial_update_cattle(self, admin_client, sample_cattle):
         """Test partial update (PATCH) of cattle."""
         url = reverse("cattle-detail", kwargs={"pk": sample_cattle.pk})
         data = {"name": "Updated Cow", "color": "Black and White"}
-        response = authenticated_client.patch(url, data)
+        response = admin_client.patch(url, data)
         assert response.status_code == status.HTTP_200_OK
         assert response.data["name"] == "Updated Cow"
         assert response.data["color"] == "Black and White"
@@ -434,7 +449,7 @@ class TestCattleUpdateAPI:
         assert response.data["tag_number"] == "T001"
         assert response.data["sex"] == "cow"
 
-    def test_full_update_cattle(self, authenticated_client, sample_cattle):
+    def test_full_update_cattle(self, admin_client, sample_cattle):
         """Test full update (PUT) of cattle."""
         url = reverse("cattle-detail", kwargs={"pk": sample_cattle.pk})
         data = {
@@ -446,30 +461,30 @@ class TestCattleUpdateAPI:
             "breed": "Holstein",
             "horn_status": "Dehorned",
         }
-        response = authenticated_client.put(url, data)
+        response = admin_client.put(url, data)
         assert response.status_code == status.HTTP_200_OK
         assert response.data["name"] == "Fully Updated"
         assert response.data["breed"] == "Holstein"
 
-    def test_update_cattle_invalid_data(self, authenticated_client, sample_cattle):
+    def test_update_cattle_invalid_data(self, admin_client, sample_cattle):
         """Test updating cattle with invalid data."""
         url = reverse("cattle-detail", kwargs={"pk": sample_cattle.pk})
         data = {"sex": "invalid_sex"}
-        response = authenticated_client.patch(url, data)
+        response = admin_client.patch(url, data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "sex" in response.data
 
-    def test_update_cattle_self_parent(self, authenticated_client, sample_cattle):
+    def test_update_cattle_self_parent(self, admin_client, sample_cattle):
         """Test that cattle cannot be its own parent."""
         url = reverse("cattle-detail", kwargs={"pk": sample_cattle.pk})
         data = {"sire": sample_cattle.pk}
-        response = authenticated_client.patch(url, data)
+        response = admin_client.patch(url, data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "sire" in response.data
 
         # Also test for dam
         data = {"dam": sample_cattle.pk}
-        response = authenticated_client.patch(url, data)
+        response = admin_client.patch(url, data)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "dam" in response.data
 
@@ -482,22 +497,22 @@ class TestCattleDeleteAPI:
         """Test that unauthenticated requests are rejected."""
         url = reverse("cattle-detail", kwargs={"pk": sample_cattle.pk})
         response = api_client.delete(url)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_delete_cattle_authenticated(self, authenticated_client, sample_cattle):
+    def test_delete_cattle_authenticated(self, admin_client, sample_cattle):
         """Test deleting cattle."""
         cattle_id = sample_cattle.pk
         url = reverse("cattle-detail", kwargs={"pk": cattle_id})
-        response = authenticated_client.delete(url)
+        response = admin_client.delete(url)
         assert response.status_code == status.HTTP_204_NO_CONTENT
 
         # Verify deletion
         assert not Cattle.objects.filter(pk=cattle_id).exists()
 
-    def test_delete_cattle_not_found(self, authenticated_client):
+    def test_delete_cattle_not_found(self, admin_client):
         """Test deleting non-existent cattle returns 404."""
         url = reverse("cattle-detail", kwargs={"pk": 99999})
-        response = authenticated_client.delete(url)
+        response = admin_client.delete(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -509,19 +524,19 @@ class TestCattleArchiveAction:
         """Test that unauthenticated requests are rejected."""
         url = reverse("cattle-archive", kwargs={"pk": sample_cattle.pk})
         response = api_client.post(url)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_archive_cattle_authenticated(self, authenticated_client, sample_cattle):
+    def test_archive_cattle_authenticated(self, admin_client, sample_cattle):
         """Test archiving cattle."""
         url = reverse("cattle-archive", kwargs={"pk": sample_cattle.pk})
-        response = authenticated_client.post(url)
+        response = admin_client.post(url)
         assert response.status_code == status.HTTP_204_NO_CONTENT
 
         # Verify status changed
         sample_cattle.refresh_from_db()
         assert sample_cattle.status == "archived"
 
-    def test_archive_already_archived_cattle(self, authenticated_client):
+    def test_archive_already_archived_cattle(self, admin_client):
         """Test archiving already archived cattle."""
         cattle = Cattle.objects.create(
             tag_number="ARCH001",
@@ -533,16 +548,16 @@ class TestCattleArchiveAction:
         )
 
         url = reverse("cattle-archive", kwargs={"pk": cattle.pk})
-        response = authenticated_client.post(url)
+        response = admin_client.post(url)
         assert response.status_code == status.HTTP_204_NO_CONTENT  # Still successful
 
         cattle.refresh_from_db()
         assert cattle.status == "archived"
 
-    def test_archive_cattle_not_found(self, authenticated_client):
+    def test_archive_cattle_not_found(self, admin_client):
         """Test archiving non-existent cattle returns 404."""
         url = reverse("cattle-archive", kwargs={"pk": 99999})
-        response = authenticated_client.post(url)
+        response = admin_client.post(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -550,7 +565,7 @@ class TestCattleArchiveAction:
 class TestCattleAPIIntegration:
     """Integration tests for cattle API."""
 
-    def test_full_crud_cycle(self, authenticated_client):
+    def test_full_crud_cycle(self, admin_client):
         """Test complete CRUD cycle for cattle."""
         # Create
         create_url = reverse("cattle-list")
@@ -562,39 +577,39 @@ class TestCattleAPIIntegration:
             "breed": "Jersey",
             "horn_status": "Polled",
         }
-        create_response = authenticated_client.post(create_url, create_data)
+        create_response = admin_client.post(create_url, create_data)
         assert create_response.status_code == status.HTTP_201_CREATED
         cattle_id = create_response.data["id"]
 
         # Read
         detail_url = reverse("cattle-detail", kwargs={"pk": cattle_id})
-        read_response = authenticated_client.get(detail_url)
+        read_response = admin_client.get(detail_url)
         assert read_response.status_code == status.HTTP_200_OK
         assert read_response.data["name"] == "Cycle Test"
 
         # Update
         update_data = {"name": "Updated Cycle Test", "sex": "cow"}
-        update_response = authenticated_client.patch(detail_url, update_data)
+        update_response = admin_client.patch(detail_url, update_data)
         assert update_response.status_code == status.HTTP_200_OK
         assert update_response.data["name"] == "Updated Cycle Test"
         assert update_response.data["sex"] == "cow"
 
         # Archive
         archive_url = reverse("cattle-archive", kwargs={"pk": cattle_id})
-        archive_response = authenticated_client.post(archive_url)
+        archive_response = admin_client.post(archive_url)
         assert archive_response.status_code == status.HTTP_204_NO_CONTENT
 
         # Verify archived
-        verify_response = authenticated_client.get(detail_url)
+        verify_response = admin_client.get(detail_url)
         assert verify_response.status_code == status.HTTP_200_OK
         assert verify_response.data["status"] == "archived"
 
         # Delete
-        delete_response = authenticated_client.delete(detail_url)
+        delete_response = admin_client.delete(detail_url)
         assert delete_response.status_code == status.HTTP_204_NO_CONTENT
 
         # Verify deleted
-        verify_deleted_response = authenticated_client.get(detail_url)
+        verify_deleted_response = admin_client.get(detail_url)
         assert verify_deleted_response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_complex_filtering_scenario(self, authenticated_client):
@@ -651,4 +666,255 @@ class TestCattleAPIIntegration:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["count"] == 1
         assert response.data["results"][0]["tag_number"] == "F001"
+
+
+@pytest.mark.django_db()
+class TestCattleLineageAPI:
+    """Test cases for cattle lineage endpoint."""
+
+    def test_lineage_unauthenticated(self, api_client, sample_cattle):
+        """Test that unauthenticated requests are rejected."""
+        url = reverse("cattle-lineage", kwargs={"pk": sample_cattle.pk})
+        response = api_client.get(url)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_lineage_simple_cattle(self, authenticated_client, sample_cattle):
+        """Test lineage for cattle with no relatives."""
+        url = reverse("cattle-lineage", kwargs={"pk": sample_cattle.pk})
+        response = authenticated_client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        
+        # Check structure
+        assert "current" in response.data
+        assert "parents" in response.data
+        assert "grandparents" in response.data
+        assert "siblings" in response.data
+        assert "offspring" in response.data
+        
+        # Verify current cattle data with frontend field names
+        assert response.data["current"]["ear_tag"] == "T001"
+        assert response.data["current"]["name"] == "Test Cow"
+        assert response.data["current"]["sex"] == "F"  # Mapped from 'cow' to 'F'
+        
+        # No relatives
+        assert response.data["parents"]["father"] is None
+        assert response.data["parents"]["mother"] is None
+        assert response.data["siblings"] == []
+        assert response.data["offspring"] == []
+
+    def test_lineage_with_parents(self, authenticated_client):
+        """Test lineage for cattle with parents."""
+        # Create parents
+        sire = Cattle.objects.create(
+            tag_number="SIRE001",
+            name="Thunder",
+            sex="bull",
+            color="Black",
+            breed="Angus",
+            horn_status="Horned",
+            dob=date(2018, 1, 1),
+        )
+        dam = Cattle.objects.create(
+            tag_number="DAM001",
+            name="Daisy",
+            sex="cow",
+            color="Brown",
+            breed="Angus",
+            horn_status="Polled",
+            dob=date(2018, 6, 1),
+        )
+        
+        # Create offspring
+        calf = Cattle.objects.create(
+            tag_number="CALF001",
+            name="Junior",
+            sex="bull",
+            color="Black",
+            breed="Angus",
+            horn_status="Polled",
+            sire=sire,
+            dam=dam,
+            dob=date(2021, 3, 15),
+        )
+        
+        url = reverse("cattle-lineage", kwargs={"pk": calf.pk})
+        response = authenticated_client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        
+        # Check parents with frontend field names
+        assert response.data["parents"]["father"]["ear_tag"] == "SIRE001"
+        assert response.data["parents"]["father"]["name"] == "Thunder"
+        assert response.data["parents"]["father"]["sex"] == "M"  # Mapped from 'bull' to 'M'
+        
+        assert response.data["parents"]["mother"]["ear_tag"] == "DAM001"
+        assert response.data["parents"]["mother"]["name"] == "Daisy"
+        assert response.data["parents"]["mother"]["sex"] == "F"  # Mapped from 'cow' to 'F'
+
+    def test_lineage_with_grandparents(self, authenticated_client):
+        """Test lineage for cattle with grandparents."""
+        # Create grandparents
+        paternal_grandsire = Cattle.objects.create(
+            tag_number="PGS001",
+            sex="bull",
+            color="Red",
+            breed="Hereford",
+            horn_status="Horned",
+        )
+        paternal_granddam = Cattle.objects.create(
+            tag_number="PGD001",
+            sex="cow",
+            color="White",
+            breed="Charolais",
+            horn_status="Polled",
+        )
+        
+        # Create parents
+        sire = Cattle.objects.create(
+            tag_number="SIRE002",
+            sex="bull",
+            color="Mixed",
+            breed="Cross",
+            horn_status="Polled",
+            sire=paternal_grandsire,
+            dam=paternal_granddam,
+        )
+        dam = Cattle.objects.create(
+            tag_number="DAM002",
+            sex="cow",
+            color="Brown",
+            breed="Angus",
+            horn_status="Polled",
+        )
+        
+        # Create offspring
+        calf = Cattle.objects.create(
+            tag_number="CALF002",
+            sex="heifer",
+            color="Mixed",
+            breed="Cross",
+            horn_status="Polled",
+            sire=sire,
+            dam=dam,
+        )
+        
+        url = reverse("cattle-lineage", kwargs={"pk": calf.pk})
+        response = authenticated_client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        
+        # Check grandparents
+        assert response.data["grandparents"]["paternal_grandfather"]["ear_tag"] == "PGS001"
+        assert response.data["grandparents"]["paternal_grandmother"]["ear_tag"] == "PGD001"
+        assert response.data["grandparents"]["maternal_grandfather"] is None
+        assert response.data["grandparents"]["maternal_grandmother"] is None
+
+    def test_lineage_with_siblings(self, authenticated_client):
+        """Test lineage for cattle with siblings."""
+        # Create parents
+        sire = Cattle.objects.create(
+            tag_number="SIRE003",
+            sex="bull",
+            color="Black",
+            breed="Angus",
+            horn_status="Horned",
+        )
+        dam = Cattle.objects.create(
+            tag_number="DAM003",
+            sex="cow",
+            color="Brown",
+            breed="Angus",
+            horn_status="Polled",
+        )
+        
+        # Create multiple offspring (siblings)
+        calf1 = Cattle.objects.create(
+            tag_number="CALF003",
+            name="First",
+            sex="bull",
+            color="Black",
+            breed="Angus",
+            horn_status="Polled",
+            sire=sire,
+            dam=dam,
+        )
+        calf2 = Cattle.objects.create(
+            tag_number="CALF004",
+            name="Second",
+            sex="heifer",
+            color="Brown",
+            breed="Angus",
+            horn_status="Polled",
+            sire=sire,
+            dam=dam,
+        )
+        calf3 = Cattle.objects.create(
+            tag_number="CALF005",
+            name="Third",
+            sex="bull",
+            color="Mixed",
+            breed="Angus",
+            horn_status="Horned",
+            sire=sire,  # Same sire, different dam (half-sibling)
+            dam=None,
+        )
+        
+        url = reverse("cattle-lineage", kwargs={"pk": calf1.pk})
+        response = authenticated_client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        
+        # Check siblings (should include full siblings and half-siblings)
+        siblings = response.data["siblings"]
+        assert len(siblings) == 2  # calf2 and calf3
+        
+        sibling_tags = [s["ear_tag"] for s in siblings]
+        assert "CALF004" in sibling_tags
+        assert "CALF005" in sibling_tags
+        assert "CALF003" not in sibling_tags  # Should not include self
+
+    def test_lineage_with_offspring(self, authenticated_client):
+        """Test lineage for cattle with offspring."""
+        # Create a mature cow
+        cow = Cattle.objects.create(
+            tag_number="COW001",
+            name="Matriarch",
+            sex="cow",
+            color="Brown",
+            breed="Jersey",
+            horn_status="Polled",
+        )
+        
+        # Create offspring
+        offspring1 = Cattle.objects.create(
+            tag_number="OFF001",
+            sex="heifer",
+            color="Brown",
+            breed="Jersey",
+            horn_status="Polled",
+            dam=cow,
+        )
+        offspring2 = Cattle.objects.create(
+            tag_number="OFF002",
+            sex="bull",
+            color="Brown",
+            breed="Jersey",
+            horn_status="Polled",
+            dam=cow,
+        )
+        
+        url = reverse("cattle-lineage", kwargs={"pk": cow.pk})
+        response = authenticated_client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        
+        # Check offspring
+        offspring = response.data["offspring"]
+        assert len(offspring) == 2
+        
+        offspring_tags = [o["ear_tag"] for o in offspring]
+        assert "OFF001" in offspring_tags
+        assert "OFF002" in offspring_tags
+
+    def test_lineage_not_found(self, authenticated_client):
+        """Test lineage for non-existent cattle returns 404."""
+        url = reverse("cattle-lineage", kwargs={"pk": 99999})
+        response = authenticated_client.get(url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
 

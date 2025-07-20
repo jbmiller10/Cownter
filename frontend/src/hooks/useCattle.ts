@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '../api/client'
-import { Cattle, PaginatedResponse } from '../types/api'
+import { Cattle, PaginatedResponse, CattleLineage } from '../types/api'
 
 const CATTLE_QUERY_KEY = 'cattle'
 
@@ -88,7 +88,7 @@ export const useCattleLineage = (id: string) => {
   return useQuery({
     queryKey: [CATTLE_QUERY_KEY, id, 'lineage'],
     queryFn: async () => {
-      const { data } = await apiClient.get<any>(`/cattle/${id}/lineage/`)
+      const { data } = await apiClient.get<CattleLineage>(`/cattle/${id}/lineage/`)
       return data
     },
     enabled: !!id,

@@ -15,6 +15,7 @@ const generateMockCattle = (count: number): Cattle[] => {
     name: `Cattle ${i + 1}`,
     ear_tag: `T${String(i + 1).padStart(3, '0')}`,
     color: ['Black', 'Brown', 'White', 'Spotted', 'Red'][i % 5],
+    breed: ['Angus', 'Hereford', 'Holstein', 'Jersey', 'Simmental'][i % 5],
     sex: i % 2 === 0 ? ('F' as const) : ('M' as const),
     date_of_birth: new Date(2020 + (i % 4), i % 12, (i % 28) + 1).toISOString().split('T')[0],
     horn_status: (['HORNED', 'POLLED', 'SCURRED', 'DEHORNED'] as const)[i % 4],
