@@ -6,7 +6,7 @@ import pytest
 from django.contrib.auth.models import User
 from django.db import IntegrityError
 
-from .models import Cattle, Photo, PhotoCattle, WeightLog
+from ..models import Cattle, Photo, PhotoCattle, WeightLog
 
 
 @pytest.mark.django_db()

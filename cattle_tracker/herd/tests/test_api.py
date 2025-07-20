@@ -11,24 +11,31 @@ from rest_framework.test import APIClient
 
 from herd.models import Cattle
 
+# Constants for magic values
+DEFAULT_PAGE_SIZE = 20
+SMALL_TEST_SET_SIZE = 5
+LARGE_TEST_SET_SIZE = 25
+ACTIVE_CATTLE_COUNT = 3
+DEFAULT_PASSWORD = "testpass123"  # noqa: S105
+
 
 @pytest.fixture()
-def api_client():
+def api_client() -> APIClient:
     """Create an API client."""
     return APIClient()
 
 
 @pytest.fixture()
-def authenticated_client(api_client):
+def authenticated_client(api_client: APIClient) -> APIClient:
     """Create an authenticated API client."""
-    user = User.objects.create_user(username="testuser", password="testpass123")
+    user = User.objects.create_user(username="testuser", password=DEFAULT_PASSWORD)
     token = Token.objects.create(user=user)
     api_client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
     return api_client
 
 
 @pytest.fixture()
-def sample_cattle():
+def sample_cattle() -> Cattle:
     """Create sample cattle for testing."""
     return Cattle.objects.create(
         tag_number="T001",
@@ -42,12 +49,10 @@ def sample_cattle():
 
 
 @pytest.fixture()
-def cattle_list():
+def cattle_list() -> list[Cattle]:
     """Create a list of cattle for testing."""
-    cattle = []
-    for i in range(5):
-        cattle.append(
-            Cattle.objects.create(
+    cattle = [
+        Cattle.objects.create(
                 tag_number=f"T00{i+2}",
                 name=f"Test Cattle {i+2}",
                 sex="cow" if i % 2 == 0 else "bull",
@@ -55,9 +60,10 @@ def cattle_list():
                 color="Brown" if i % 2 == 0 else "Black",
                 breed="Angus",
                 horn_status="Polled",
-                status="active" if i < 3 else "archived",
-            ),
-        )
+                status="active" if i < ACTIVE_CATTLE_COUNT else "archived",
+            )
+        for i in range(SMALL_TEST_SET_SIZE)
+    ]
     return cattle
 
 
@@ -65,24 +71,28 @@ def cattle_list():
 class TestCattleListAPI:
     """Test cases for cattle list endpoint."""
 
-    def test_list_cattle_unauthenticated(self, api_client):
+    def test_list_cattle_unauthenticated(self, api_client: APIClient) -> None:
         """Test that unauthenticated requests are rejected."""
         url = reverse("cattle-list")
         response = api_client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_list_cattle_authenticated(self, authenticated_client, cattle_list):
+    def test_list_cattle_authenticated(
+        self,
+        authenticated_client: APIClient,
+        cattle_list: list[Cattle],  # noqa: ARG002
+    ) -> None:
         """Test listing cattle with authentication."""
         url = reverse("cattle-list")
         response = authenticated_client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data["count"] == 5
-        assert len(response.data["results"]) == 5
+        assert response.data["count"] == SMALL_TEST_SET_SIZE
+        assert len(response.data["results"]) == SMALL_TEST_SET_SIZE
 
-    def test_list_cattle_pagination(self, authenticated_client):
+    def test_list_cattle_pagination(self, authenticated_client: APIClient) -> None:
         """Test pagination of cattle list."""
         # Create 25 cattle
-        for i in range(25):
+        for i in range(LARGE_TEST_SET_SIZE):
             Cattle.objects.create(
                 tag_number=f"P{i:03d}",
                 sex="cow",
@@ -94,47 +104,67 @@ class TestCattleListAPI:
         url = reverse("cattle-list")
         response = authenticated_client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.data["count"] == 25
-        assert len(response.data["results"]) == 20  # Default page size
+        assert response.data["count"] == LARGE_TEST_SET_SIZE
+        assert len(response.data["results"]) == DEFAULT_PAGE_SIZE
         assert response.data["next"] is not None
 
-    def test_filter_by_sex(self, authenticated_client, cattle_list):
+    def test_filter_by_sex(
+        self,
+        authenticated_client: APIClient,
+        cattle_list: list[Cattle],  # noqa: ARG002
+    ) -> None:
         """Test filtering cattle by sex."""
         url = reverse("cattle-list")
         response = authenticated_client.get(url, {"sex": "cow"})
         assert response.status_code == status.HTTP_200_OK
-        assert response.data["count"] == 3
+        assert response.data["count"] == ACTIVE_CATTLE_COUNT
         for cattle in response.data["results"]:
             assert cattle["sex"] == "cow"
 
-    def test_filter_by_color(self, authenticated_client, cattle_list):
+    def test_filter_by_color(
+        self,
+        authenticated_client: APIClient,
+        cattle_list: list[Cattle],  # noqa: ARG002
+    ) -> None:
         """Test filtering cattle by color."""
         url = reverse("cattle-list")
         response = authenticated_client.get(url, {"color": "Brown"})
         assert response.status_code == status.HTTP_200_OK
-        assert response.data["count"] == 3
+        assert response.data["count"] == ACTIVE_CATTLE_COUNT
         for cattle in response.data["results"]:
             assert "Brown" in cattle["color"]
 
-    def test_filter_by_status(self, authenticated_client, cattle_list):
+    def test_filter_by_status(
+        self,
+        authenticated_client: APIClient,
+        cattle_list: list[Cattle],  # noqa: ARG002
+    ) -> None:
         """Test filtering cattle by status."""
         url = reverse("cattle-list")
         response = authenticated_client.get(url, {"status": "active"})
         assert response.status_code == status.HTTP_200_OK
-        assert response.data["count"] == 3
+        assert response.data["count"] == ACTIVE_CATTLE_COUNT
         for cattle in response.data["results"]:
             assert cattle["status"] == "active"
 
-    def test_filter_by_dob_range(self, authenticated_client, cattle_list):
+    def test_filter_by_dob_range(
+        self,
+        authenticated_client: APIClient,
+        cattle_list: list[Cattle],  # noqa: ARG002
+    ) -> None:
         """Test filtering cattle by date of birth range."""
         url = reverse("cattle-list")
         response = authenticated_client.get(
             url, {"dob_gte": "2020-01-01", "dob_lte": "2020-03-01"},
         )
         assert response.status_code == status.HTTP_200_OK
-        assert response.data["count"] == 3
+        assert response.data["count"] == ACTIVE_CATTLE_COUNT
 
-    def test_search_cattle(self, authenticated_client, cattle_list):
+    def test_search_cattle(
+        self,
+        authenticated_client: APIClient,
+        cattle_list: list[Cattle],  # noqa: ARG002
+    ) -> None:
         """Test searching cattle by various fields."""
         url = reverse("cattle-list")
         # Search by tag number
@@ -147,7 +177,11 @@ class TestCattleListAPI:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["count"] == 1
 
-    def test_ordering_cattle(self, authenticated_client, cattle_list):
+    def test_ordering_cattle(
+        self,
+        authenticated_client: APIClient,
+        cattle_list: list[Cattle],  # noqa: ARG002
+    ) -> None:
         """Test ordering cattle by different fields."""
         url = reverse("cattle-list")
         # Order by dob descending
@@ -162,13 +196,21 @@ class TestCattleListAPI:
 class TestCattleRetrieveAPI:
     """Test cases for cattle retrieve endpoint."""
 
-    def test_retrieve_cattle_unauthenticated(self, api_client, sample_cattle):
+    def test_retrieve_cattle_unauthenticated(
+        self,
+        api_client: APIClient,
+        sample_cattle: Cattle,
+    ) -> None:
         """Test that unauthenticated requests are rejected."""
         url = reverse("cattle-detail", kwargs={"pk": sample_cattle.pk})
         response = api_client.get(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_retrieve_cattle_authenticated(self, authenticated_client, sample_cattle):
+    def test_retrieve_cattle_authenticated(
+        self,
+        authenticated_client: APIClient,
+        sample_cattle: Cattle,
+    ) -> None:
         """Test retrieving a single cattle with authentication."""
         url = reverse("cattle-detail", kwargs={"pk": sample_cattle.pk})
         response = authenticated_client.get(url)
@@ -176,13 +218,13 @@ class TestCattleRetrieveAPI:
         assert response.data["tag_number"] == "T001"
         assert response.data["name"] == "Test Cow"
 
-    def test_retrieve_cattle_not_found(self, authenticated_client):
+    def test_retrieve_cattle_not_found(self, authenticated_client: APIClient) -> None:
         """Test retrieving non-existent cattle returns 404."""
         url = reverse("cattle-detail", kwargs={"pk": 99999})
         response = authenticated_client.get(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_retrieve_cattle_with_lineage(self, authenticated_client):
+    def test_retrieve_cattle_with_lineage(self, authenticated_client: APIClient) -> None:
         """Test retrieving cattle with sire and dam information."""
         sire = Cattle.objects.create(
             tag_number="S001", sex="bull", color="Black", breed="Angus", horn_status="Polled",
@@ -213,7 +255,7 @@ class TestCattleRetrieveAPI:
 class TestCattleCreateAPI:
     """Test cases for cattle create endpoint."""
 
-    def test_create_cattle_unauthenticated(self, api_client):
+    def test_create_cattle_unauthenticated(self, api_client: APIClient) -> None:
         """Test that unauthenticated requests are rejected."""
         url = reverse("cattle-list")
         data = {
@@ -226,7 +268,7 @@ class TestCattleCreateAPI:
         response = api_client.post(url, data)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_create_cattle_authenticated(self, authenticated_client):
+    def test_create_cattle_authenticated(self, authenticated_client: APIClient) -> None:
         """Test creating cattle with valid data."""
         url = reverse("cattle-list")
         data = {
