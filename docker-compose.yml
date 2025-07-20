@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: cattle_tracker
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  web:
+    build: ./cattle_tracker
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./cattle_tracker:/app
+      - media_volume:/app/media
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - DB_HOST=db
+      - DB_NAME=cattle_tracker
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_PORT=5432
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      target: development
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    stdin_open: true
+    tty: true
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - media_volume:/usr/share/nginx/html/media
+    depends_on:
+      - web
+      - frontend
+    profiles:
+      - production
+
+volumes:
+  postgres_data:
+  media_volume:

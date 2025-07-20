@@ -1,0 +1,28 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: bash -c 'cd cattle_tracker && ruff check --fix .'
+        language: system
+        types: [python]
+        
+      - id: ruff-format
+        name: ruff format
+        entry: bash -c 'cd cattle_tracker && ruff format .'
+        language: system
+        types: [python]
+        
+      - id: prettier
+        name: prettier
+        entry: bash -c 'cd frontend && npx prettier --write .'
+        language: system
+        files: '\.(js|jsx|ts|tsx|json|css|md)$'
+        
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
