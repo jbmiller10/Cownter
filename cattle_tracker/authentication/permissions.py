@@ -9,8 +9,7 @@ class IsAdminGroupMember(permissions.BasePermission):
     def has_permission(self, request, view) -> bool:
         """Check if user is authenticated and in admin group."""
         return (
-            request.user
-            and request.user.is_authenticated
+            request.user.is_authenticated
             and request.user.groups.filter(name="admin").exists()
         )
 
@@ -20,7 +19,7 @@ class IsViewerOrAdmin(permissions.BasePermission):
 
     def has_permission(self, request, view) -> bool:
         """Check permissions based on request method and user group."""
-        if not request.user or not request.user.is_authenticated:
+        if not request.user.is_authenticated:
             return False
 
         # Admin users have full access
@@ -39,7 +38,7 @@ class IsOwnerOrAdmin(permissions.BasePermission):
 
     def has_object_permission(self, request, view, obj) -> bool:
         """Check object-level permissions."""
-        if not request.user or not request.user.is_authenticated:
+        if not request.user.is_authenticated:
             return False
 
         # Admin users have full access

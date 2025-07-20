@@ -50,6 +50,15 @@ class Command(BaseCommand):
         password = os.environ.get("DEFAULT_USER_PASSWORD")
         email = os.environ.get("DEFAULT_USER_EMAIL", "")
         group_name = os.environ.get("DEFAULT_USER_GROUP", "admin")
+        
+        # Validate group name
+        if group_name not in ["admin", "viewer"]:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"Invalid group '{group_name}', defaulting to 'viewer'",
+                ),
+            )
+            group_name = "viewer"
 
         if not username or not password:
             self.stdout.write(

@@ -5,6 +5,7 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .serializers import (
@@ -75,8 +76,16 @@ class LogoutView(APIView):
             token = RefreshToken(refresh_token)
             token.blacklist()
             return Response(status=status.HTTP_205_RESET_CONTENT)
-        except Exception:
-            return Response(status=status.HTTP_400_BAD_REQUEST)
+        except KeyError:
+            return Response(
+                {"detail": "Refresh token is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except TokenError:
+            return Response(
+                {"detail": "Invalid token"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 class CurrentUserView(generics.RetrieveUpdateAPIView):
