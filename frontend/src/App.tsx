@@ -27,6 +27,9 @@ const WeightLogsPage = React.lazy(() =>
 const NotFoundPage = React.lazy(() =>
   import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage }))
 )
+const HerdListView = React.lazy(() =>
+  import('./components/HerdListView').then((m) => ({ default: m.HerdListView }))
+)
 
 // Loading component for lazy-loaded routes
 const PageLoader: React.FC = () => (
@@ -69,6 +72,38 @@ function App() {
             element={
               <Suspense fallback={<PageLoader />}>
                 <CattleListPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="herd"
+            element={
+              <Suspense fallback={<PageLoader />}>
+                <HerdListView />
+              </Suspense>
+            }
+          />
+          <Route
+            path="cattle/:id"
+            element={
+              <Suspense fallback={<PageLoader />}>
+                <div>Cattle Detail Page - Coming Soon</div>
+              </Suspense>
+            }
+          />
+          <Route
+            path="cattle/:id/edit"
+            element={
+              <Suspense fallback={<PageLoader />}>
+                <div>Cattle Edit Page - Coming Soon</div>
+              </Suspense>
+            }
+          />
+          <Route
+            path="cattle/new"
+            element={
+              <Suspense fallback={<PageLoader />}>
+                <div>Add New Cattle - Coming Soon</div>
               </Suspense>
             }
           />
