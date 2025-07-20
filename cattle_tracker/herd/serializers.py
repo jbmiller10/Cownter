@@ -8,14 +8,34 @@ from .models import Cattle
 
 
 class CattleSerializer(serializers.ModelSerializer):
-    """Serializer for Cattle model."""
+    """
+    Serializer for Cattle model.
+    
+    Handles serialization/deserialization of cattle records with validation for:
+    - Sex choices (cow, bull, steer, heifer, calf)
+    - Status choices (active, archived)
+    - Parent relationships (sire must be bull/steer, dam must be cow/heifer)
+    - Self-parent prevention
+    
+    Includes read-only fields for parent tag numbers for convenience.
+    """
 
     # Cache valid choices at class level to avoid recreation on each validation
     VALID_SEX_CHOICES: ClassVar[set[str]] = set(dict(Cattle.SEX_CHOICES).keys())
     VALID_STATUS_CHOICES: ClassVar[set[str]] = set(dict(Cattle.STATUS_CHOICES).keys())
 
-    sire_tag = serializers.CharField(source="sire.tag_number", read_only=True, allow_null=True)
-    dam_tag = serializers.CharField(source="dam.tag_number", read_only=True, allow_null=True)
+    sire_tag = serializers.CharField(
+        source="sire.tag_number",
+        read_only=True,
+        allow_null=True,
+        help_text="Tag number of the sire (father)",
+    )
+    dam_tag = serializers.CharField(
+        source="dam.tag_number",
+        read_only=True,
+        allow_null=True,
+        help_text="Tag number of the dam (mother)",
+    )
 
     class Meta:
         """Meta options for CattleSerializer."""
